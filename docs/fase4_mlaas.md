@@ -59,6 +59,13 @@ docker compose up --build                   # http://localhost:8000/docs
 - La imagen solo lleva el código y las dependencias de la API, con versiones fijadas por `requirements.lock.txt`. No incluye MLflow, cartopy ni xarray.
 - Los modelos y los datos se **montan** como volúmenes de solo lectura: se actualizan sin reconstruir la imagen.
 - Usuario sin privilegios y `HEALTHCHECK` sobre `/salud`.
+- `xgboost` se sustituye por **`xgboost-cpu`** (mismo módulo y versión): la variante normal arrastra ~345 MB de librerías NVIDIA para GPU que el servicio no usa. Imagen: **1,73 GB → 948 MB** con predicciones idénticas.
+
+**Verificado (2026-11-09, Docker 29.3.1):**
+- `docker compose up --build` funciona.
+- El contenedor queda `healthy` y corre como el usuario `gemelo`.
+- `/predict`, `/explain` y `/hipoxia/predict` devuelven los mismos valores que la API local.
+- Los errores devuelven 422.
 
 ## Tests
 `pytest` → 30 tests:

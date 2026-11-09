@@ -16,7 +16,14 @@ WORKDIR /app
 # 1) Dependencias (capa cacheable): versiones fijadas con el lock del entorno de desarrollo
 COPY pyproject.toml README.md requirements.lock.txt ./
 COPY src ./src
-RUN pip install -c requirements.lock.txt ".[api]"
+# xgboost trae ~345 MB de librerías NVIDIA (GPU) que aquí no se usan: se sustituye por la variante
+# oficial solo-CPU (mismo módulo y versión). Todo en la misma capa para que el espacio se libere.
+RUN pip install -c requirements.lock.txt ".[api]" \
+ && XGB_VERSION=$(pip show xgboost | sed -n 's/^Version: //p') \
+ && pip uninstall -y xgboost $(pip list --format=freeze | grep -i '^nvidia-' | cut -d= -f1) \
+ && ! pip list | grep -qi '^nvidia-' \
+ && pip install "xgboost-cpu==${XGB_VERSION}" \
+ && python -c "import xgboost; print('xgboost', xgboost.__version__)"
 
 # 2) Configuración del gemelo (zona, umbrales, partición)
 COPY config ./config
