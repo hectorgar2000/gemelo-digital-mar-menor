@@ -65,9 +65,9 @@ meteo:
   url: https://archive-api.open-meteo.com/v1/archive
   modelo: era5
   inicio: "1982-01-01"
-  puntos:
-    cuenca: {lat: 37.73, lon: -0.79}
-    mar: {lat: 37.75, lon: -0.60}
+  puntos:   # lat/lon = lo que se pide a la API; celda = la celda ERA5 que devuelve (comprobado)
+    cuenca: {lat: 37.73, lon: -0.79, celda: {lat: 37.75, lon: -1.00}}
+    mar: {lat: 37.75, lon: -0.60, celda: {lat: 37.75, lon: -0.50}}
   variables:
     - temperature_2m_mean
     - temperature_2m_max

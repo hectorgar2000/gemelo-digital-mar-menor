@@ -3,6 +3,7 @@ aiohappyeyeballs==2.7.1
 aiohttp==3.14.5
 aiosignal==1.4.0
 alembic==1.20.1
+altair==6.3.0
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.16.0
@@ -121,6 +122,7 @@ parso==0.8.7
 partd==1.4.2
 pillow==13.0.0
 platformdirs==4.14.5
+plotly==7.1.0
 pluggy==1.7.0
 prettytable==3.18.0
 prometheus_client==0.26.0
@@ -135,6 +137,7 @@ pyasn1_modules==0.4.2
 pycparser==3.12
 pydantic==2.14.3
 pydantic_core==2.50.4
+pydeck==0.9.3
 Pygments==2.21.0
 pyogrio==0.13.0
 pyparsing==3.3.3
@@ -198,6 +201,7 @@ SQLAlchemy==2.1.8
 sqlparse==0.6.1
 stack-data==0.6.3
 starlette==1.10.0
+streamlit==1.67.0
 terminado==0.18.1
 threadpoolctl==3.8.0
 tinycss2==1.5.1
@@ -212,10 +216,12 @@ uri-template==1.3.0
 urllib3==2.8.0
 uvicorn==0.54.0
 waitress==3.0.2
+watchdog==7.1.0
 wcwidth==0.9.4
 webcolors==25.10.0
 webencodings==0.6.1
 websocket-client==1.9.2
+websockets==17.4
 Werkzeug==3.1.9
 xarray==2026.9.0
 xgboost==3.4.1

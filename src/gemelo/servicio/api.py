@@ -29,7 +29,7 @@ app = FastAPI(
     title="Gemelo digital del Mar Menor",
     description="Predicción de temperatura del mar y olas de calor marinas (laguna y costa) y riesgo de "
                 "hipoxia, con intervalos de incertidumbre y explicaciones SHAP.",
-    version="0.5.0",
+    version="0.6.0",
     lifespan=ciclo_de_vida,
 )
 
@@ -114,6 +114,27 @@ def modelos():
                     "metricas_test": v["metricas_test"]} for k, v in m["sst"].items()},
         "hipoxia": {k: m["hipoxia"][k] for k in ("version_registro", "umbral_alerta", "metricas_loyo")},
     }
+
+
+def _tabla(df) -> list[dict]:
+    out = df.round(3).reset_index()
+    out.iloc[:, 0] = out.iloc[:, 0].dt.strftime("%Y-%m-%d")
+    return out.rename(columns={out.columns[0]: "fecha"}).to_dict(orient="records")
+
+
+@app.get("/estado", summary="Estado del gemelo un día: SST, anomalía, ola de calor en curso y última campaña")
+def estado(fecha: date | None = None):
+    return _ejecutar(gemelo().estado, fecha)
+
+
+@app.get("/series", summary="Serie diaria de SST observada con climatología y umbral de ola de calor")
+def series(zona: Literal["laguna", "costa"], desde: date | None = None, hasta: date | None = None):
+    return {"zona": zona, "datos": _tabla(_ejecutar(gemelo().serie_sst, zona, desde, hasta))}
+
+
+@app.get("/hipoxia/campanas", summary="Historial de campañas in situ (oxígeno y temperatura de fondo)")
+def campanas():
+    return {"datos": _tabla(gemelo().historial_campanas())}
 
 
 @app.post("/predict", summary="Predicción de SST y ola de calor con intervalo del 90 %")

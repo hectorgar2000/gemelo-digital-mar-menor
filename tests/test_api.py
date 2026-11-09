@@ -75,5 +75,17 @@ def test_errores_claros(cliente, ruta, cuerpo):
     assert isinstance(r.json()["detail"], str) and len(r.json()["detail"]) > 10
 
 
+def test_estado_series_y_campanas(cliente):
+    e = cliente.get("/estado", params={"fecha": "2024-08-01"}).json()
+    lag = e["zonas"]["laguna"]
+    assert lag["ola_calor_en_curso"] == (lag["dias_sobre_umbral"] >= 5)
+    assert e["ultima_campana_hipoxia"]["fecha"] <= "2024-08-01"
+    s = cliente.get("/series", params={"zona": "laguna", "desde": "2024-07-01", "hasta": "2024-07-31"}).json()
+    assert len(s["datos"]) == 31 and {"sst", "climatologia", "umbral_ola_calor", "anomalia"} <= set(s["datos"][0])
+    assert cliente.get("/series", params={"zona": "laguna", "desde": "1990-01-01", "hasta": "2024-01-01"}).status_code == 422
+    c = cliente.get("/hipoxia/campanas").json()["datos"]
+    assert len(c) > 300 and "pct_fondo_hipoxia" in c[0]
+
+
 def test_zona_invalida_la_rechaza_pydantic(cliente):
     assert cliente.post("/predict", json={"zona": "atlantico"}).status_code == 422

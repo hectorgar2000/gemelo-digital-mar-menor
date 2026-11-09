@@ -83,6 +83,57 @@ class Gemelo:
     def fila(self, fecha, variables) -> pd.DataFrame:
         return self.ds.loc[[fecha], variables]
 
+    # ------------------------------------------------------------------ lectura del estado
+    def serie_sst(self, zona: str, desde=None, hasta=None, max_dias: int = 1500) -> pd.DataFrame:
+        """SST diaria observada con su climatología, umbral de ola de calor y anomalía."""
+        if zona not in self.zonas:
+            raise ErrorGemelo(f"Zona desconocida '{zona}'. Zonas: {self.zonas}.")
+        hasta = self.ultima_fecha() if hasta is None else pd.Timestamp(hasta)
+        desde = hasta - pd.Timedelta(days=365) if desde is None else pd.Timestamp(desde)
+        if (hasta - desde).days > max_dias:
+            raise ErrorGemelo(f"Rango demasiado largo: máximo {max_dias} días por petición.")
+        s = self.diario.loc[desde:hasta, f"sst_{zona}"].dropna()
+        doy = _doy(s.index)
+        clim = self.ref[f"clim_{zona}"].reindex(doy).values
+        return pd.DataFrame({"sst": s.values, "climatologia": clim,
+                             "umbral_ola_calor": self.ref[f"p90_obj_{zona}"].reindex(doy).values,
+                             "anomalia": s.values - clim}, index=s.index)
+
+    def estado(self, fecha=None) -> dict:
+        """Foto del gemelo un día: SST, anomalía y si hay ola de calor en curso (causal: solo días <= fecha)."""
+        fecha = self._fecha(fecha)
+        cfg = cargar_config()
+        zonas = {}
+        for z in self.zonas:
+            s = self.serie_sst(z, fecha - pd.Timedelta(days=120), fecha)
+            sobre = (s["sst"] > s["umbral_ola_calor"]).values[::-1]
+            racha = int(np.argmin(sobre)) if not sobre.all() else len(sobre)
+            hoy = s.iloc[-1]
+            zonas[z] = {"sst": round(float(hoy["sst"]), 2), "anomalia": round(float(hoy["anomalia"]), 2),
+                        "umbral_ola_calor": round(float(hoy["umbral_ola_calor"]), 2),
+                        "dias_sobre_umbral": racha,
+                        "ola_calor_en_curso": racha >= cfg["umbrales"]["mhw_dias_min"],
+                        "caja": cfg["subzonas"][z]}
+        ult = self.campanas[self.campanas <= fecha]
+        campana = None
+        if len(ult):
+            c = self.ds_hip.loc[ult.max()]
+            campana = {"fecha": str(ult.max().date()), "pct_fondo_hipoxia": round(float(c["ahora_pct_hipoxia"]), 1),
+                       "o2_fondo_media": round(float(c["ahora_o2_fondo_media"]), 2),
+                       "temp_fondo_media": round(float(c["ahora_temp_fondo_media"]), 2),
+                       "dias_desde_campana": int((fecha - ult.max()).days)}
+        return {"fecha": str(fecha.date()), "zonas": zonas, "ultima_campana_hipoxia": campana,
+                # la celda ERA5 real (no el punto pedido): es lo que representan los datos
+                "puntos_meteo": {k: p.get("celda", {"lat": p["lat"], "lon": p["lon"]})
+                                 for k, p in cfg["meteo"]["puntos"].items()},
+                "rango_fechas": [str(self.fechas_validas.min().date()), str(self.fechas_validas.max().date())]}
+
+    def historial_campanas(self) -> pd.DataFrame:
+        cols = {"ahora_pct_hipoxia": "pct_fondo_hipoxia", "ahora_o2_fondo_media": "o2_fondo_media",
+                "ahora_o2_fondo_min": "o2_fondo_min", "ahora_temp_fondo_media": "temp_fondo_media",
+                "ahora_sal_fondo_media": "sal_fondo_media"}
+        return self.ds_hip[list(cols)].rename(columns=cols)
+
     # ------------------------------------------------------------------ intervalo
     def residuos_recientes(self, zona, h, fecha) -> tuple[np.ndarray, str]:
         """Residuos (real - predicho) de los últimos VENTANA días cuyo resultado YA se conocía en `fecha`

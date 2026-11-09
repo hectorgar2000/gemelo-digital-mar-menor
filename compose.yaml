@@ -1,12 +1,28 @@
-# docker compose up --build   ->   http://localhost:8000/docs
+# docker compose up --build
+#   API:        http://localhost:8000/docs
+#   Dashboard:  http://localhost:8501
 services:
   api:
     build: .
-    image: gemelo-mar-menor:0.5.0
+    image: gemelo-mar-menor:0.6.0
     ports:
       - "8000:8000"
     volumes:
       # artefacto exportado del Model Registry (scripts/exportar_modelos.py) y estado del gemelo
       - ./models/servicio:/app/models/servicio:ro
       - ./data/processed:/app/data/processed:ro
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: gemelo-mar-menor-dashboard:0.6.0
+    ports:
+      - "8501:8501"
+    environment:
+      GEMELO_API_URL: http://api:8000   # red interna de compose
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped

@@ -32,7 +32,8 @@ DIAS_TRAMO = 400  # historia necesaria para recalcular lags (30), medias (90) y 
 DRIVERS = {
     "temp_agua": {"tipo": "suma", "unidad": "°C", "series": ["sst_laguna", "sst_costa", "thetao_costa"],
                   "insitu": ["ahora_temp_sup_media", "ahora_temp_fondo_media"],
-                  "descripcion": "Episodio de agua más cálida/fría (+x °C) durante los últimos `dias`."},
+                  "descripcion": "Episodio de agua más cálida/fría (+x °C) durante los últimos `dias`, en laguna y "
+                                 "costa a la vez (y en la última campaña in situ)."},
     "calentamiento_base": {"tipo": "suma", "unidad": "°C", "series": [], "insitu": ["ahora_temp_sup_media",
                            "ahora_temp_fondo_media"],
                            "descripcion": "Cambio de clima de fondo (método delta): desplaza la climatología "

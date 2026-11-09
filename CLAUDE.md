@@ -54,6 +54,13 @@
 - `temp_agua` (episodio) ≠ `calentamiento_base` (método delta). Los forzamientos meteorológicos son del pasado: hay poco efecto por diseño.
 - Hipoxia en servicio: `hipoxia_logistica` **v2** (sin viento). Para promocionar una versión: entrenar → `registrar_modelos.py --modelos hipoxia` → `exportar_modelos.py`.
 
+## Estado tras la Fase 6 (ver docs/fase6_dashboard.md)
+- Dashboard `src/gemelo/dashboard/` (app, cliente HTTP, gráficos): solo consume la API, nunca carga modelos.
+- Arranque local: `.claude/launch.json` (api :8000, dashboard :8501). Docker: `docker compose up --build`.
+- Streamlit no recarga módulos importados: reiniciar el servidor tras editar `graficos.py` o `cliente.py`.
+- Usar `width="stretch"` (no `use_container_width`, obsoleto).
+- **No editar ficheros con Get-Content/Set-Content de PowerShell 5.1**: corrompe las tildes. Usar Edit/Write o Python.
+
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.
 - Al entrenar o evaluar a horizonte h, usar `features.filas_de_particion()` (purga de frontera).

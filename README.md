@@ -47,7 +47,8 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 python scripts/registrar_modelos.py     # Model Registry, alias @produccion
 python scripts/exportar_modelos.py      # -> models/servicio (artefacto de la API)
 uvicorn gemelo.servicio.api:app         # http://127.0.0.1:8000/docs
-docker compose up --build               # la misma API en contenedor
+streamlit run src/gemelo/dashboard/app.py   # dashboard (necesita la API arrancada)
+docker compose up --build               # API (:8000) + dashboard (:8501) en contenedores
 ```
 
 Los notebooks usan el kernel **Python (gemelo)**.
@@ -64,7 +65,7 @@ Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, 
 | 3 · Primer modelo + XAI | XGBoost que bate a la línea base, con SHAP ([informe](docs/fase3_informe.md)) | ✅ |
 | 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker ([detalle](docs/fase4_mlaas.md)) | ✅ |
 | 5 · Escenarios | `/scenario` con incertidumbre ([detalle](docs/fase5_escenarios.md)) | ✅ |
-| 6 · Dashboard | Streamlit de punta a punta | |
+| 6 · Dashboard | Streamlit de punta a punta ([detalle](docs/fase6_dashboard.md)) | ✅ |
 | 7 · Evolución | Modelos espaciotemporales, tiempo real, 4D | |
 
 ## Fuentes de datos

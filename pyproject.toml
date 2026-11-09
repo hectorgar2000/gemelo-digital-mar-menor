@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gemelo"
-version = "0.5.0"
+version = "0.6.0"
 description = "Gemelo digital marino del Mar Menor con IA explicable"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -32,8 +32,8 @@ datos = [
 ml = ["scikit-learn", "xgboost", "shap", "mlflow", "matplotlib"]
 # Fase 4: servicio (sin MLflow ni stack geoespacial: imagen ligera)
 api = ["fastapi", "uvicorn", "httpx", "scikit-learn", "xgboost", "shap"]
-# Fase 6: dashboard
-dashboard = ["streamlit"]
+# Fase 6: dashboard (cliente HTTP de la API: no carga modelos)
+dashboard = ["streamlit", "plotly", "httpx"]
 dev = ["jupyterlab", "pytest", "ruff"]
 
 [tool.setuptools.packages.find]
