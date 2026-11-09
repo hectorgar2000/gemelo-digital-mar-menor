@@ -77,6 +77,13 @@ meteo:
     - wind_direction_10m_dominant
     - shortwave_radiation_sum
 
+# Servidor de Datos Científicos del Mar Menor (UPCT): mapas L2 semanales, 200x200, 10 niveles 0,5-5 m.
+# Cada variable es un fichero <Variable>.nc con la misma rejilla (comprobado 2026-11-09).
 upct:
-  thredds_opendap: https://marmenor.upct.es/thredds/dodsC/L2/Oxigeno.nc
-  variable: Oxigeno
+  thredds_opendap: https://marmenor.upct.es/thredds/dodsC/L2
+  variables: [Oxigeno, Temperatura, Salinidad, Clorofila, Turbidez]
+  # Control de calidad: medias de laguna por debajo de este valor se marcan como NaN.
+  # Motivo: mar-abr 2017 (inicio de la serie) da salinidad superficial media de 6-23 con fondo ~40;
+  # no es físico para una laguna hipersalina (~42-45). La DANA de 2019 bajó la superficie a ~35 (se conserva).
+  # PENDIENTE de confirmar con la UPCT.
+  sal_sup_min_plausible: 30

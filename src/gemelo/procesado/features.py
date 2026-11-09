@@ -109,6 +109,9 @@ def construir_dataset_sst(diario: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 
         mhw = flag_mhw(sst, p90_obj, u["mhw_dias_min"])
         for h in cfg["horizontes_dias"]:
+            # y_delta: cambio de anomalía respecto a hoy. Es el objetivo recomendado para los
+            # árboles: no necesitan extrapolar niveles nunca vistos (test ~1 °C más cálido que train).
+            Y[f"y_delta_{z}_h{h}"] = anom.shift(-h) - anom
             Y[f"y_anom_{z}_h{h}"] = anom.shift(-h)
             Y[f"y_sst_{z}_h{h}"] = sst.shift(-h)
             Y[f"y_mhw_{z}_h{h}"] = mhw.shift(-h)
@@ -158,6 +161,10 @@ def construir_dataset_hipoxia(campanas: pd.DataFrame, dataset_sst: pd.DataFrame,
     gap = (c.index.to_series().shift(-1) - c.index.to_series()).dt.days
 
     df = c.add_prefix("ahora_")
+    # tendencia desde la campaña ANTERIOR (causal)
+    df["tend_o2_fondo_media"] = c["o2_fondo_media"].diff().values
+    df["tend_pct_hipoxia"] = c["pct_hipoxia"].diff().values
+    df["dias_desde_anterior"] = c.index.to_series().diff().dt.days.values
     df["dias_hasta_siguiente"] = gap.values
     df["y_pct_hipoxia"] = sig["pct_hipoxia"].values
     df["y_o2_fondo_min"] = sig["o2_fondo_min"].values
@@ -171,6 +178,30 @@ def construir_dataset_hipoxia(campanas: pd.DataFrame, dataset_sst: pd.DataFrame,
     df = df[(df["dias_hasta_siguiente"] >= gap_min) & (df["dias_hasta_siguiente"] <= gap_max)]
     df["anio"] = df.index.year  # para validación cruzada dejando un año fuera
     return df
+
+
+# ---------------------------------------------------------------- grupos (para SHAP agrupado)
+GRUPOS = [  # (grupo, función que reconoce la columna); el primero que encaja gana
+    ("calendario", lambda c: c.startswith("doy_")),
+    ("oxigeno_in_situ", lambda c: "o2_" in c or "hipoxia" in c or "anoxia" in c),
+    ("estratificacion", lambda c: "estrat" in c or "mld_" in c),
+    ("agua_in_situ", lambda c: c.startswith("ahora_")),
+    ("muestreo", lambda c: c.startswith("dias_hasta") or c.startswith("dias_desde_anterior")),
+    ("temp_laguna", lambda c: "laguna" in c and ("anom" in c or "sst" in c or "racha" in c)),
+    ("temp_costa", lambda c: ("costa" in c and ("anom" in c or "sst" in c or "racha" in c or "thetao" in c
+                                               or "bottomT" in c)) or c == "dif_laguna_costa"),
+    ("clorofila_satelite", lambda c: "logchl" in c),
+    ("lluvia", lambda c: "prec_" in c or "lluvia" in c),
+    ("viento", lambda c: "viento" in c),
+    ("aire_y_radiacion", lambda c: c.startswith(("t2m", "t2max", "rad_"))),
+]
+
+
+def grupo_variable(col: str) -> str:
+    for nombre, encaja in GRUPOS:
+        if encaja(col):
+            return nombre
+    return "otros"
 
 
 # ---------------------------------------------------------------- partición

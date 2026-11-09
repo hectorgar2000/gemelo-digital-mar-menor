@@ -100,6 +100,49 @@ def test_dias_desde_es_causal():
     assert r.tolist() == [99, 0, 1, 2, 0, 1]
 
 
+def campanas_sinteticas(n=30, semilla=1):
+    """Campañas inventadas (cada 7 días) con las columnas de data/interim/insitu_campanas.parquet."""
+    rng = np.random.default_rng(semilla)
+    idx = pd.date_range("2021-01-04", periods=n, freq="7D", name="fecha")
+    df = pd.DataFrame({c: rng.uniform(0, 10, n) for c in [
+        "o2_sup_media", "o2_fondo_media", "o2_fondo_min", "pct_hipoxia", "pct_anoxia",
+        "temp_sup_media", "temp_fondo_media", "sal_sup_media", "sal_fondo_media"]}, index=idx)
+    df["pct_hipoxia"] = rng.choice([0.0, 50.0], n)
+    df["estrat_sal"] = df.sal_fondo_media - df.sal_sup_media
+    return df
+
+
+def test_hipoxia_objetivo_es_la_campana_siguiente(cfg, base):
+    _, ds = base
+    c = campanas_sinteticas()
+    hip = F.construir_dataset_hipoxia(c, ds, cfg)
+    for i in [0, 5, 10]:
+        t, t_sig = c.index[i], c.index[i + 1]
+        assert hip.loc[t, "y_pct_hipoxia"] == c.loc[t_sig, "pct_hipoxia"]
+        assert hip.loc[t, "ahora_pct_hipoxia"] == c.loc[t, "pct_hipoxia"]
+        assert hip.loc[t, "y_hipoxia"] == float(c.loc[t_sig, "pct_hipoxia"] > cfg["umbrales"]["hipoxia_area_pct"])
+
+
+def test_hipoxia_variables_no_usan_campanas_futuras(cfg, base):
+    _, ds = base
+    c = campanas_sinteticas()
+    corte = c.index[15]
+    c2 = c.copy()
+    c2.loc[c2.index > corte] += 3.0
+    h1 = F.construir_dataset_hipoxia(c, ds, cfg)
+    h2 = F.construir_dataset_hipoxia(c2, ds, cfg)
+    x = [col for col in h1.columns if not col.startswith("y_")]
+    pd.testing.assert_frame_equal(h1.loc[:corte, x], h2.loc[:corte, x])
+
+
+def test_todas_las_variables_tienen_grupo(cfg, base):
+    _, ds = base
+    hip = F.construir_dataset_hipoxia(campanas_sinteticas(), ds, cfg)
+    for df in [ds, hip]:
+        sin_grupo = [c for c in columnas_x(df) if c != "anio" and F.grupo_variable(c) == "otros"]
+        assert not sin_grupo, sin_grupo
+
+
 def test_mhw_exige_cinco_dias_seguidos():
     idx = pd.date_range("2000-01-01", periods=20, freq="D")
     umbral = pd.Series(20.0, index=range(1, 366))

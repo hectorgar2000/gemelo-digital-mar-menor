@@ -30,6 +30,13 @@
 - Meteorología: ERA5 vía Open-Meteo (sin cuenta). Viento en km/h. Las peticiones largas pueden devolver 429: el código reintenta.
 - Deriva: el test (2022–2026) es ~1 °C más cálido que train y tiene un 38 % de días de ola de calor (5 % en train).
 
+## Decisiones para la Fase 3 (acordadas con el usuario)
+- Regresión de SST: objetivo `y_delta_{zona}_h{h}` (cambio de anomalía); reconstruir SST = clim + anom_hoy + delta.
+- Olas de calor: derivarlas de la SST predicha + umbral, no con un clasificador aparte.
+- Hiperparámetros con validación de origen móvil; línea base obligatoria: persistencia amortiguada.
+- SHAP agrupado con `features.grupo_variable`; adjuntar `data/processed/manifest.json` a cada run de MLflow.
+- Hipoxia: validación dejando un año fuera, métricas por episodio, batir la persistencia (recall 0,73).
+
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.
 - Al entrenar o evaluar a horizonte h, usar `features.filas_de_particion()` (purga de frontera).

@@ -14,7 +14,7 @@ pytest                                     # 14 tests, incluidos los anti-fuga
 | Salida | Contenido |
 |---|---|
 | `data/interim/diario.parquet` | 16.344 días × 23 series por subzona (SST, log-clorofila, física de costa, ERA5 cuenca/mar) |
-| `data/interim/oxigeno_campanas.parquet` | 380 campañas UPCT: O₂ en superficie y fondo, % del área en hipoxia/anoxia |
+| `data/interim/insitu_campanas.parquet` | 380 campañas UPCT: O₂, temperatura, salinidad, clorofila y turbidez en superficie y fondo, % del área en hipoxia/anoxia y estratificación |
 | `data/processed/dataset_sst.parquet` | 10.500 días (1998–2026) × 81 variables + objetivos `y_anom_*`, `y_sst_*`, `y_mhw_*` para h = 1, 3, 7, 30 |
 | `data/processed/dataset_hipoxia.parquet` | 359 pares de campañas (3–14 días) × 46 variables; objetivo `y_hipoxia` (> 10 % del fondo < 4 mg/L) |
 
@@ -44,6 +44,20 @@ pytest                                     # 14 tests, incluidos los anti-fuga
 - Nuevas variables de lluvia a 60/90 días y días desde la última lluvia fuerte.
 - Paso del oxígeno: de 6 min a 8 s (cargar en memoria antes de indexar).
 
+## Mejoras aplicadas tras la revisión (segunda iteración)
+- **Variables in situ de la UPCT** (temperatura, salinidad, clorofila, turbidez + oxígeno) en superficie y fondo, con **estratificación** (`estrat_sal`, `estrat_temp`) para el módulo de hipoxia. Sustituyen a la SST de satélite, que tiene un sesgo de ±2 °C en la laguna.
+- **Objetivo `y_delta_*`**: cambio de la anomalía a *h* días. Es el objetivo recomendado para la Fase 3 (robusto a la deriva).
+- **Tendencias entre campañas** (`tend_o2_fondo_media`, `tend_pct_hipoxia`), calculadas solo con la campaña anterior.
+- **Grupos de variables** (`features.grupo_variable`) para SHAP agrupado: temperatura de laguna, de costa, lluvia, viento, estratificación, oxígeno in situ…
+- **Manifiesto** `data/processed/manifest.json`: commit, hash de la config, ficheros raw y variables con su grupo. Se adjuntará a cada experimento de MLflow.
+- **Versiones fijadas** en `requirements.lock.txt` (reproducibilidad y Docker en la Fase 4) y `.gitattributes` con finales de línea LF.
+- Tests nuevos: el objetivo de hipoxia es la campaña siguiente, sus variables no usan campañas futuras y todas las variables tienen grupo.
+- **Control de calidad de la salinidad:** 6 campañas de mar–may 2017 (inicio de la serie) dan una salinidad superficial media de 6–23 con el fondo a ~40, algo no físico para la laguna (~42–45). Se marcan como NaN; el umbral está en `config/zona.yaml`. **Pendiente de confirmar con la UPCT.** La turbidez de 118 del 26-09-2019 (DANA y anoxia) se conserva.
+
+**Primer vistazo a la hipoxia con datos in situ** (medianas, campaña actual → hipoxia en la siguiente sí/no):
+temperatura de fondo **28,0 frente a 19,7 °C** · O₂ de fondo 4,9 frente a 7,0 mg/L · lluvia acumulada en 30 días 3,5 frente a 10,4 mm · estratificación salina 0,61 frente a 0,44.
+La hipoxia aparece en verano, con agua caliente y sin lluvia reciente. La DANA de 2019 es la excepción y por eso hay que analizar los episodios uno a uno.
+
 ## Mejoras propuestas (por prioridad)
 
 **Para la Fase 3 (entrenamiento)**
@@ -54,7 +68,7 @@ pytest                                     # 14 tests, incluidos los anti-fuga
 5. **SHAP por grupos** (temperatura propia, costa, meteorología, clorofila, calendario) o poda de variables redundantes, para que la explicación no se diluya.
 
 **Para el módulo de hipoxia**
-6. **Usar las variables in situ de la UPCT** (temperatura, salinidad, clorofila y turbidez, ya disponibles en el mismo THREDDS y en las mismas campañas) en vez de la SST de satélite, que está sesgada en la laguna (hallazgo 1).
+6. ~~Usar las variables in situ de la UPCT~~ ✅ Hecho.
 7. **Evaluar por episodio** y dejar fuera un año completo en la validación cruzada. Hay que batir la persistencia (recall 0,73) y reportar el Brier score.
 
 **Para el gemelo operativo (Fases 4–5)**

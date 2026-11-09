@@ -1,0 +1,4 @@
+# Finales de línea LF en el repo (evita avisos CRLF y diffs ruidosos entre Windows y Docker/Linux)
+* text=auto eol=lf
+*.ipynb text eol=lf
+*.png binary
