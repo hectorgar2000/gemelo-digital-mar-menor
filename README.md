@@ -41,6 +41,10 @@ python scripts/descargar_upct.py
 python scripts/descargar_meteo.py
 python scripts/construir_dataset.py
 pytest
+pip install -e ".[ml]"
+python scripts/entrenar_sst.py
+python scripts/entrenar_hipoxia.py
+mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
 Los notebooks usan el kernel **Python (gemelo)**.
@@ -54,7 +58,7 @@ Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, 
 | 0 · Planteamiento | Repo y documento de alcance | ✅ |
 | 1 · Ingesta y exploración | Datos en `data/raw/` y notebook de exploración ([resumen](docs/fase1_resumen.md)) | ✅ |
 | 2 · Procesado | Pipeline `raw → processed` ([resumen y revisión](docs/fase2_resumen.md)) | ✅ |
-| 3 · Primer modelo + XAI | XGBoost que bate a la línea base, con SHAP | |
+| 3 · Primer modelo + XAI | XGBoost que bate a la línea base, con SHAP ([informe](docs/fase3_informe.md)) | ✅ |
 | 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker | |
 | 5 · Escenarios | `/scenario` con incertidumbre | |
 | 6 · Dashboard | Streamlit de punta a punta | |

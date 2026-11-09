@@ -37,6 +37,11 @@
 - SHAP agrupado con `features.grupo_variable`; adjuntar `data/processed/manifest.json` a cada run de MLflow.
 - Hipoxia: validación dejando un año fuera, métricas por episodio, batir la persistencia (recall 0,73).
 
+## Estado tras la Fase 3 (ver docs/fase3_informe.md)
+- MLflow: `sqlite:///mlflow.db` + `mlartifacts/` (fuera de git). Experimentos `sst_mar_menor` y `hipoxia_mar_menor`. Usar `MLFLOW_DISABLE_AGENT_HINT=1`.
+- SST: XGBoost (delta) bate a la persistencia amortiguada en los 8 casos; en la costa a 3–7 días empata con la persistencia simple. Intervalo conformal del 90 % → cobertura en test del 78–89 % (deriva).
+- Hipoxia: la logística anticipa 4/9 inicios (28 falsas alarmas); XGBoost no supera a la persistencia. Para la API: logística como alerta temprana.
+
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.
 - Al entrenar o evaluar a horizonte h, usar `features.filas_de_particion()` (purga de frontera).
