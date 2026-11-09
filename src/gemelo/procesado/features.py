@@ -88,7 +88,8 @@ def referencias_sst(diario: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     """Tablas por día del año (1..365) que comparten entrenamiento y servicio:
     clim_{zona}     climatología de las anomalías
     p90_obj_{zona}  umbral de ola de calor (definición estándar, base 1991-2020)
-    p90_var_{zona}  umbral para la variable racha_p90 (solo datos anteriores a validación)"""
+    p90_var_{zona}  umbral para la variable racha_p90 (solo datos anteriores a validación)
+    clim_t2m_{punto} climatología de la temperatura del aire (para su anomalía)"""
     u = cfg["umbrales"]
     ini, fin = periodo_climatologia(diario, cfg)
     ref = {}
@@ -99,16 +100,20 @@ def referencias_sst(diario: pd.DataFrame, cfg: dict) -> pd.DataFrame:
         # (validación), así que solo puede definir el OBJETIVO, nunca una variable (sería fuga).
         ref[f"p90_obj_{z}"] = umbral_p90(sst, *u["climatologia"], pct=u["mhw_percentil"])
         ref[f"p90_var_{z}"] = umbral_p90(sst, ini, fin, pct=u["mhw_percentil"])
+    for p in cfg["meteo"]["puntos"]:
+        ref[f"clim_t2m_{p}"] = climatologia(diario[f"t2m_{p}"], ini, fin)
     df = pd.DataFrame(ref)
     df.index.name = "dia_del_anio"
     return df
 
 
-def construir_dataset_sst(diario: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+def construir_dataset_sst(diario: pd.DataFrame, cfg: dict, ref: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Variables + objetivos. Con `ref` (referencias ya calculadas) se puede llamar sobre un TRAMO
+    corto de la serie: es lo que hace el motor de escenarios al recalcular una serie perturbada."""
     part = cfg["particion"]
     u = cfg["umbrales"]
-    clim_ini, clim_fin = periodo_climatologia(diario, cfg)
-    ref = referencias_sst(diario, cfg)
+    if ref is None:
+        ref = referencias_sst(diario, cfg)
     X = {}
     Y = {}
 
@@ -147,7 +152,7 @@ def construir_dataset_sst(diario: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     # Meteorología ERA5
     for p in cfg["meteo"]["puntos"]:
         t2m = diario[f"t2m_{p}"]
-        t2m_anom = anomalia(t2m, climatologia(t2m, clim_ini, clim_fin))
+        t2m_anom = anomalia(t2m, ref[f"clim_t2m_{p}"])
         X[f"t2m_anom_{p}"] = t2m_anom
         X[f"t2m_anom_{p}_media3"] = t2m_anom.rolling(3).mean()
         X[f"t2m_anom_{p}_media7"] = t2m_anom.rolling(7).mean()

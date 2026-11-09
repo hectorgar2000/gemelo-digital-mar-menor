@@ -72,6 +72,8 @@ Lectura de las variables principales (laguna, h = 7):
 
 ## 3. Riesgo de hipoxia en la próxima campaña
 
+> **Actualización (Fase 5):** el modelo en servicio es la **v2**, sin la variable de viento, cuya relación aprendida tenía el signo contrario a la física. Las métricas no empeoran (precisión 0,46 → 0,48; falsas alarmas 28 → 26). Los gráficos `hipoxia_*.png` corresponden ya a la v2. Detalle en [fase5_escenarios.md](fase5_escenarios.md). La tabla de abajo es la de la v1 original.
+
 **Montaje:** validación dejando un año fuera (2017–2024), sin búsqueda de hiperparámetros por la escasez de datos.
 
 | Modelo | Recall | Precisión | Falsas alarmas | Episodios detectados | **Inicios anticipados** | PR-AUC |

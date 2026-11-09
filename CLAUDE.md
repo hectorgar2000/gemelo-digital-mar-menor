@@ -49,6 +49,11 @@
 - Intervalo: conformal con ventana móvil de 365 días (cobertura en test del 86–89 %).
 - `GEMELO_RAIZ` fija la raíz del proyecto (necesario en Docker). Los parquet de `referencias_sst` los comparten el entrenamiento y la API.
 
+## Estado tras la Fase 5 (ver docs/fase5_escenarios.md)
+- `gemelo.servicio.escenarios.MotorEscenarios`: perturba las series diarias (`data/processed/series_diarias.parquet`) y recalcula las variables con `construir_dataset_sst(tramo, cfg, ref)`. No se perturban nunca las variables derivadas directamente.
+- `temp_agua` (episodio) ≠ `calentamiento_base` (método delta). Los forzamientos meteorológicos son del pasado: hay poco efecto por diseño.
+- Hipoxia en servicio: `hipoxia_logistica` **v2** (sin viento). Para promocionar una versión: entrenar → `registrar_modelos.py --modelos hipoxia` → `exportar_modelos.py`.
+
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.
 - Al entrenar o evaluar a horizonte h, usar `features.filas_de_particion()` (purga de frontera).

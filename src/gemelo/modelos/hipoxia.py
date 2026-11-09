@@ -15,11 +15,15 @@ from sklearn.preprocessing import StandardScaler
 
 from gemelo.modelos.comun import columnas_x
 
-# Variables con sentido físico para la logística (interpretables una a una)
+# Variables con sentido físico para la logística (interpretables una a una).
+# v2 (Fase 5): se quita `viento_cuenca_media7`. En v1 tenía coeficiente POSITIVO (más viento -> más
+# riesgo), lo contrario de la física (el viento mezcla y oxigena el fondo); probablemente la correlación
+# estacional de las brisas de verano. El motor de escenarios lo destapó: "viento ×0,5" BAJABA el riesgo.
+# Sin ella, las métricas por años no empeoran (recall 0,80 = ; precisión 0,46 -> 0,48).
 VARS_LOGISTICA = [
     "ahora_o2_fondo_media", "ahora_pct_hipoxia", "ahora_temp_fondo_media", "ahora_estrat_sal",
     "ahora_estrat_temp", "ahora_turb_fondo_media", "ahora_chl_fondo_media", "tend_o2_fondo_media",
-    "prec_cuenca_suma30", "prec_cuenca_suma90", "viento_cuenca_media7", "dias_hasta_siguiente",
+    "prec_cuenca_suma30", "prec_cuenca_suma90", "dias_hasta_siguiente",
 ]
 PARAMS_XGB = dict(max_depth=2, n_estimators=200, learning_rate=0.05, min_child_weight=3, subsample=0.8,
                   colsample_bytree=0.8, reg_lambda=5.0, random_state=42, n_jobs=-1, eval_metric="logloss")

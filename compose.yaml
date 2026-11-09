@@ -2,7 +2,7 @@
 services:
   api:
     build: .
-    image: gemelo-mar-menor:0.4.0
+    image: gemelo-mar-menor:0.5.0
     ports:
       - "8000:8000"
     volumes:

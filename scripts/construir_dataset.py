@@ -78,10 +78,13 @@ if __name__ == "__main__":
          f"{campanas.isna().sum()[lambda s: s > 0].to_dict() or 'ninguno'}")
 
     paso("3/5 dataset SST / olas de calor")
-    sst = construir_dataset_sst(diario, cfg)
-    sst.to_parquet(PROCESSED / "dataset_sst.parquet")
     # Climatología y umbrales por día del año: los usa también la API (misma fuente, sin divergencias)
-    referencias_sst(diario, cfg).to_parquet(PROCESSED / "referencias_sst.parquet")
+    ref = referencias_sst(diario, cfg)
+    ref.to_parquet(PROCESSED / "referencias_sst.parquet")
+    sst = construir_dataset_sst(diario, cfg, ref)
+    sst.to_parquet(PROCESSED / "dataset_sst.parquet")
+    # Series diarias de origen: el motor de escenarios las perturba y recalcula las variables
+    diario.to_parquet(PROCESSED / "series_diarias.parquet")
     n_x = sum(not c.startswith("y_") and c != "particion" for c in sst.columns)
     paso(f"    {sst.shape} · {n_x} variables · filas por partición: {sst.particion.value_counts().to_dict()}")
 

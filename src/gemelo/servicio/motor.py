@@ -42,6 +42,7 @@ class Gemelo:
         self.ds = pd.read_parquet(dir_datos / "dataset_sst.parquet")
         self.ds_hip = pd.read_parquet(dir_datos / "dataset_hipoxia.parquet")
         self.ref = pd.read_parquet(dir_datos / "referencias_sst.parquet")
+        self.diario = pd.read_parquet(dir_datos / "series_diarias.parquet")  # series de origen (escenarios)
         self._explicadores = {}
         # Los modelos finales se entrenaron con train + validación: para esas fechas, una
         # "predicción" del pasado no es honesta (el modelo ya vio la respuesta).

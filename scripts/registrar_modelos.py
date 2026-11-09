@@ -2,7 +2,8 @@
 'produccion'. Es el paso de "aprobar" un modelo: la API solo sirve lo que tenga ese alias.
 
 Uso:
-    python scripts/registrar_modelos.py
+    python scripts/registrar_modelos.py                     # todo
+    python scripts/registrar_modelos.py --modelos hipoxia   # solo la hipoxia (nueva versión)
 """
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -30,10 +31,7 @@ def registrar(client, uri, nombre, descripcion, tags):
     print(f"  {nombre} v{mv.version} -> @{ALIAS}")
 
 
-if __name__ == "__main__":
-    configurar_mlflow("sst_mar_menor")
-    client = MlflowClient()
-
+def registrar_sst(client):
     padre = ultimo_run(client, "sst_mar_menor", "sst_xgboost_delta")
     hijos = client.search_runs([padre.info.experiment_id], f"tags.mlflow.parentRunId = '{padre.info.run_id}'")
     print(f"SST: run {padre.info.run_id} con {len(hijos)} modelos")
@@ -45,6 +43,8 @@ if __name__ == "__main__":
         registrar(client, f"runs:/{r.info.run_id}/modelo", nombre, desc,
                   {"test_rmse": round(m["test_rmse"], 4), "zona": p["zona"], "h": p["h"]})
 
+
+def registrar_hipoxia(client):
     configurar_mlflow("hipoxia_mar_menor")
     r = ultimo_run(client, "hipoxia_mar_menor", "hipoxia_loyo")
     m = r.data.metrics
@@ -53,3 +53,17 @@ if __name__ == "__main__":
               f"Logística de riesgo de hipoxia en la próxima campaña. LOYO: recall {m['logistica_recall']:.2f}, "
               f"precisión {m['logistica_precision']:.2f}, inicios anticipados {int(m['logistica_inicios_anticipados'])}/9.",
               {"recall": round(m["logistica_recall"], 3), "precision": round(m["logistica_precision"], 3)})
+
+
+if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--modelos", nargs="+", choices=["sst", "hipoxia"], default=["sst", "hipoxia"],
+                    help="qué familias registrar (por defecto, todas)")
+    args = ap.parse_args()
+    configurar_mlflow("sst_mar_menor")
+    cliente = MlflowClient()
+    if "sst" in args.modelos:
+        registrar_sst(cliente)
+    if "hipoxia" in args.modelos:
+        registrar_hipoxia(cliente)

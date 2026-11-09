@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from gemelo.servicio.escenarios import DRIVERS, NO_DISPONIBLES, NOTAS, MotorEscenarios, Perturbacion
 from gemelo.servicio.motor import Gemelo, ErrorGemelo
 
 ESTADO = {}
@@ -19,6 +20,7 @@ ESTADO = {}
 @asynccontextmanager
 async def ciclo_de_vida(app: FastAPI):
     ESTADO["gemelo"] = Gemelo()  # modelos y datos se cargan UNA vez al arrancar
+    ESTADO["escenarios"] = MotorEscenarios(ESTADO["gemelo"])
     yield
     ESTADO.clear()
 
@@ -27,7 +29,7 @@ app = FastAPI(
     title="Gemelo digital del Mar Menor",
     description="Predicción de temperatura del mar y olas de calor marinas (laguna y costa) y riesgo de "
                 "hipoxia, con intervalos de incertidumbre y explicaciones SHAP.",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=ciclo_de_vida,
 )
 
@@ -68,6 +70,33 @@ class PeticionHipoxia(BaseModel):
     model_config = {"json_schema_extra": {"examples": [{"fecha": "2021-07-27", "dias_hasta_siguiente": 7}]}}
 
 
+class PerturbacionIn(BaseModel):
+    driver: Literal[tuple(DRIVERS)] = Field(description="Qué se perturba (ver GET /scenario/drivers)")
+    valor: float = Field(description="Suma (°C) o factor (×), según el driver")
+    incertidumbre: float = Field(default=0.0, ge=0, description="Desviación típica del valor (Monte Carlo)")
+    dias: int = Field(default=30, ge=1, le=365, description="Últimos días a los que se aplica")
+
+
+class HipoxiaEscenario(BaseModel):
+    fecha_campana: date | None = Field(default=None, description="Campaña base. Vacío = la última")
+    dias_hasta_siguiente: int = Field(default=7, ge=3, le=14)
+
+
+class PeticionEscenario(BaseModel):
+    zona: Literal["laguna", "costa"]
+    horizontes: list[int] = Field(default=[1, 7, 30])
+    fecha: date | None = Field(default=None, description="Día base. Vacío = último día con datos")
+    perturbaciones: list[PerturbacionIn] = Field(default=[], max_length=6)
+    hipoxia: HipoxiaEscenario | None = Field(default=None, description="Si se indica, simula también la hipoxia")
+    n_muestras: int = Field(default=30, ge=5, le=200, description="Muestras de la incertidumbre de la perturbación")
+    semilla: int = 42
+
+    model_config = {"json_schema_extra": {"examples": [{
+        "zona": "laguna", "horizontes": [7, 30], "fecha": "2024-06-15",
+        "perturbaciones": [{"driver": "temp_agua", "valor": 1.5, "incertidumbre": 0.3, "dias": 30}],
+        "hipoxia": {"fecha_campana": "2024-06-10"}}]}}
+
+
 # ------------------------------------------------------------------ endpoints
 @app.get("/salud", summary="Estado del servicio")
 def salud():
@@ -101,3 +130,26 @@ def explain(p: PeticionExplicacion):
 @app.post("/hipoxia/predict", summary="Riesgo de hipoxia en la próxima campaña, con explicación")
 def hipoxia(p: PeticionHipoxia):
     return _ejecutar(gemelo().predecir_hipoxia, p.fecha, p.dias_hasta_siguiente)
+
+
+@app.get("/scenario/drivers", summary="Qué se puede perturbar en un escenario (y qué no)")
+def drivers():
+    return {
+        "drivers": {k: {"tipo": v["tipo"], "unidad": v["unidad"], "descripcion": v["descripcion"], "nota": NOTAS[k]}
+                    for k, v in DRIVERS.items()},
+        "no_disponibles": NO_DISPONIBLES,
+    }
+
+
+@app.post("/scenario", summary="Escenario what-if frente al escenario base, con incertidumbre (Monte Carlo)")
+def scenario(p: PeticionEscenario):
+    me: MotorEscenarios = ESTADO["escenarios"]
+    perts = [Perturbacion(x.driver, x.valor, x.incertidumbre, x.dias) for x in p.perturbaciones]
+    for x in perts:
+        if DRIVERS[x.driver]["tipo"] == "factor" and x.valor < 0:
+            raise HTTPException(422, f"El driver '{x.driver}' es un factor (×): el valor no puede ser negativo.")
+    out = {"sst": _ejecutar(me.simular_sst, p.zona, p.horizontes, p.fecha, perts, p.n_muestras, p.semilla)}
+    if p.hipoxia is not None:
+        out["hipoxia"] = _ejecutar(me.simular_hipoxia, p.hipoxia.fecha_campana, perts, p.n_muestras, p.semilla,
+                                   p.hipoxia.dias_hasta_siguiente)
+    return out
