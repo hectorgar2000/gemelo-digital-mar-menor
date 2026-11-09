@@ -28,16 +28,19 @@ umbrales:
   climatologia: ["1991-01-01", "2020-12-31"]
 
 # dataset_id verificados con `copernicusmarine describe` (2026-11-09)
+# Opcionales por dataset: `inicio` (si difiere de periodo.inicio) y `profundidad_max` (m).
 copernicus:
   sst:
     dataset_id: cmems_SST_MED_SST_L4_REP_OBSERVATIONS_010_021
     variables: [analysed_sst, analysis_error]
+    inicio: "1982-01-01"    # desde el principio: hace falta para la climatología 1991-2020
   clorofila:
     dataset_id: cmems_obs-oc_med_bgc-plankton_my_l4-gapfree-multi-1km_P1D
     variables: [CHL]
   fisica_temp:
     dataset_id: cmems_mod_med_phy-temp_my_4.2km_P1D-m
     variables: [thetao, bottomT]
+    profundidad_max: 2      # solo el nivel superficial de thetao (~1 m)
   fisica_mld:
     dataset_id: cmems_mod_med_phy-mld_my_4.2km_P1D-m
     variables: [mlotst]

@@ -34,8 +34,13 @@ tests/               tests
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e ".[dev]"
+python -m ipykernel install --sys-prefix --name gemelo --display-name "Python (gemelo)"
 copernicusmarine login
+python scripts/descargar_copernicus.py
+python scripts/descargar_upct.py
 ```
+
+Los notebooks usan el kernel **Python (gemelo)**.
 
 Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, nunca en el repositorio.
 
@@ -44,7 +49,7 @@ Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, 
 | Fase | Entregable | Estado |
 |---|---|---|
 | 0 · Planteamiento | Repo y documento de alcance | ✅ |
-| 1 · Ingesta y exploración | Datos en `data/raw/` y notebook de exploración | ⏳ |
+| 1 · Ingesta y exploración | Datos en `data/raw/` y notebook de exploración ([resumen](docs/fase1_resumen.md)) | ✅ |
 | 2 · Procesado | Pipeline `raw → processed` | |
 | 3 · Primer modelo + XAI | XGBoost que bate a la línea base, con SHAP | |
 | 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker | |
