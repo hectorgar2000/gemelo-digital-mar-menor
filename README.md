@@ -38,6 +38,9 @@ python -m ipykernel install --sys-prefix --name gemelo --display-name "Python (g
 copernicusmarine login
 python scripts/descargar_copernicus.py
 python scripts/descargar_upct.py
+python scripts/descargar_meteo.py
+python scripts/construir_dataset.py
+pytest
 ```
 
 Los notebooks usan el kernel **Python (gemelo)**.
@@ -50,7 +53,7 @@ Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, 
 |---|---|---|
 | 0 · Planteamiento | Repo y documento de alcance | ✅ |
 | 1 · Ingesta y exploración | Datos en `data/raw/` y notebook de exploración ([resumen](docs/fase1_resumen.md)) | ✅ |
-| 2 · Procesado | Pipeline `raw → processed` | |
+| 2 · Procesado | Pipeline `raw → processed` ([resumen y revisión](docs/fase2_resumen.md)) | ✅ |
 | 3 · Primer modelo + XAI | XGBoost que bate a la línea base, con SHAP | |
 | 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker | |
 | 5 · Escenarios | `/scenario` con incertidumbre | |
