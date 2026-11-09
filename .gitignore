@@ -1,0 +1,34 @@
+# Datos pesados y modelos (se mantienen las carpetas con .gitkeep)
+data/**
+!data/**/
+!data/**/.gitkeep
+models/**
+!models/.gitkeep
+mlruns/
+mlartifacts/
+
+# Secretos
+.env
+*.env
+.copernicusmarine/
+*credentials*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+
+# Ficheros de datos sueltos fuera de data/
+*.nc
+*.zarr/
+*.parquet
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
