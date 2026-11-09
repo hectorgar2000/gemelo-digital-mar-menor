@@ -42,6 +42,13 @@
 - SST: XGBoost (delta) bate a la persistencia amortiguada en los 8 casos; en la costa a 3–7 días empata con la persistencia simple. Intervalo conformal del 90 % → cobertura en test del 78–89 % (deriva).
 - Hipoxia: la logística anticipa 4/9 inicios (28 falsas alarmas); XGBoost no supera a la persistencia. Para la API: logística como alerta temprana.
 
+## Estado tras la Fase 4 (ver docs/fase4_mlaas.md)
+- Dependencias por grupos: `.[datos,ml,api,dev]`. La API (`.[api]`) no lleva MLflow ni stack geoespacial.
+- Flujo: entrenar → `registrar_modelos.py` (@produccion) → `exportar_modelos.py` (models/servicio) → API/Docker.
+- `gemelo.servicio.motor.Gemelo` es el motor reutilizable (escenarios en la Fase 5 y dashboard en la Fase 6): `predecir(zona, h, fecha, X=...)` acepta una fila modificada.
+- Intervalo: conformal con ventana móvil de 365 días (cobertura en test del 86–89 %).
+- `GEMELO_RAIZ` fija la raíz del proyecto (necesario en Docker). Los parquet de `referencias_sst` los comparten el entrenamiento y la API.
+
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.
 - Al entrenar o evaluar a horizonte h, usar `features.filas_de_particion()` (purga de frontera).

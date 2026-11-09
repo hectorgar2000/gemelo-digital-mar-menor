@@ -50,6 +50,12 @@ if __name__ == "__main__":
         log, coefs, xg = H.modelos_finales(d, y)
         print("\nCoeficientes logística (variables estandarizadas):\n" + coefs.round(2).to_string())
         mlflow.log_dict(coefs.round(4).to_dict(), "coeficientes_logistica.json")
+        # La logística es el modelo elegido para servir (alerta temprana): se registra como modelo
+        ejemplo = d[H.VARS_LOGISTICA].head(3)
+        # MLflow 3 serializa con skops (más seguro que pickle) y exige declarar los tipos de confianza
+        mlflow.sklearn.log_model(log, name="modelo_logistica", input_example=ejemplo,
+                                 skops_trusted_types=["numpy.dtype"])
+        mlflow.log_dict({"umbral_alerta": 0.5, "variables": H.VARS_LOGISTICA}, "servicio.json")
         X = d[columnas_x(d)]
         sv = shap.TreeExplainer(xg)(X)
         imp = xai.importancia_por_grupo(sv, X.columns)

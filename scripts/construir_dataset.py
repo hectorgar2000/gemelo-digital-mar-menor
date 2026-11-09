@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from gemelo.config import DATA_RAW, RAIZ, RUTA_CONFIG, cargar_config
 from gemelo.procesado.features import (construir_dataset_hipoxia, construir_dataset_sst,
-                                       grupo_variable)
+                                       grupo_variable, referencias_sst)
 from gemelo.procesado.insitu import campanas_insitu
 from gemelo.procesado.series import construir_diario
 
@@ -80,6 +80,8 @@ if __name__ == "__main__":
     paso("3/5 dataset SST / olas de calor")
     sst = construir_dataset_sst(diario, cfg)
     sst.to_parquet(PROCESSED / "dataset_sst.parquet")
+    # Climatología y umbrales por día del año: los usa también la API (misma fuente, sin divergencias)
+    referencias_sst(diario, cfg).to_parquet(PROCESSED / "referencias_sst.parquet")
     n_x = sum(not c.startswith("y_") and c != "particion" for c in sst.columns)
     paso(f"    {sst.shape} · {n_x} variables · filas por partición: {sst.particion.value_counts().to_dict()}")
 

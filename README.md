@@ -33,7 +33,7 @@ tests/               tests
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[datos,ml,api,dev]"
 python -m ipykernel install --sys-prefix --name gemelo --display-name "Python (gemelo)"
 copernicusmarine login
 python scripts/descargar_copernicus.py
@@ -41,10 +41,13 @@ python scripts/descargar_upct.py
 python scripts/descargar_meteo.py
 python scripts/construir_dataset.py
 pytest
-pip install -e ".[ml]"
 python scripts/entrenar_sst.py
 python scripts/entrenar_hipoxia.py
 mlflow ui --backend-store-uri sqlite:///mlflow.db
+python scripts/registrar_modelos.py     # Model Registry, alias @produccion
+python scripts/exportar_modelos.py      # -> models/servicio (artefacto de la API)
+uvicorn gemelo.servicio.api:app         # http://127.0.0.1:8000/docs
+docker compose up --build               # la misma API en contenedor
 ```
 
 Los notebooks usan el kernel **Python (gemelo)**.
@@ -59,7 +62,7 @@ Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, 
 | 1 · Ingesta y exploración | Datos en `data/raw/` y notebook de exploración ([resumen](docs/fase1_resumen.md)) | ✅ |
 | 2 · Procesado | Pipeline `raw → processed` ([resumen y revisión](docs/fase2_resumen.md)) | ✅ |
 | 3 · Primer modelo + XAI | XGBoost que bate a la línea base, con SHAP ([informe](docs/fase3_informe.md)) | ✅ |
-| 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker | |
+| 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker ([detalle](docs/fase4_mlaas.md)) | ✅ |
 | 5 · Escenarios | `/scenario` con incertidumbre | |
 | 6 · Dashboard | Streamlit de punta a punta | |
 | 7 · Evolución | Modelos espaciotemporales, tiempo real, 4D | |

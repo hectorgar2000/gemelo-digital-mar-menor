@@ -4,31 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gemelo"
-version = "0.1.0"
+version = "0.4.0"
 description = "Gemelo digital marino del Mar Menor con IA explicable"
 readme = "README.md"
 requires-python = ">=3.11"
-# Dependencias base: ingesta y exploración (Fases 1-2)
+# Núcleo mínimo: lo que necesita cualquier parte (incluida la API)
 dependencies = [
+    "pandas",
+    "pyarrow",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+# Fases 1-2: descarga, procesado de cubos y exploración
+datos = [
     "copernicusmarine",
     "xarray",
     "dask",
     "netCDF4",
     "zarr",
-    "pandas",
-    "pyarrow",
     "geopandas",
     "rioxarray",
     "matplotlib",
     "cartopy",
-    "pyyaml",
 ]
-
-[project.optional-dependencies]
-# Fase 3: modelos y XAI
-ml = ["scikit-learn", "xgboost", "shap", "mlflow"]
-# Fase 4: serving
-api = ["fastapi", "uvicorn"]
+# Fase 3: entrenamiento, XAI y seguimiento de experimentos
+ml = ["scikit-learn", "xgboost", "shap", "mlflow", "matplotlib"]
+# Fase 4: servicio (sin MLflow ni stack geoespacial: imagen ligera)
+api = ["fastapi", "uvicorn", "httpx", "scikit-learn", "xgboost", "shap"]
 # Fase 6: dashboard
 dashboard = ["streamlit"]
 dev = ["jupyterlab", "pytest", "ruff"]

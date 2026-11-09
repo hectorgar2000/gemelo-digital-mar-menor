@@ -78,23 +78,44 @@ def dias_desde(evento: pd.Series, tope: int = TOPE_DIAS_DESDE) -> pd.Series:
 
 
 # ---------------------------------------------------------------- dataset SST / MHW
+def periodo_climatologia(diario: pd.DataFrame, cfg: dict) -> tuple[str, str]:
+    """Climatología para ANOMALÍAS: solo datos anteriores a la validación (sin fuga)."""
+    fin = pd.Timestamp(cfg["particion"]["validacion"][0]) - pd.Timedelta(days=1)
+    return str(diario.index.min().date()), str(fin.date())
+
+
+def referencias_sst(diario: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Tablas por día del año (1..365) que comparten entrenamiento y servicio:
+    clim_{zona}     climatología de las anomalías
+    p90_obj_{zona}  umbral de ola de calor (definición estándar, base 1991-2020)
+    p90_var_{zona}  umbral para la variable racha_p90 (solo datos anteriores a validación)"""
+    u = cfg["umbrales"]
+    ini, fin = periodo_climatologia(diario, cfg)
+    ref = {}
+    for z in ZONAS:
+        sst = diario[f"sst_{z}"]
+        ref[f"clim_{z}"] = climatologia(sst, ini, fin)
+        # Dos umbrales p90 distintos a propósito: la base estándar 1991-2020 incluye 2019-2020
+        # (validación), así que solo puede definir el OBJETIVO, nunca una variable (sería fuga).
+        ref[f"p90_obj_{z}"] = umbral_p90(sst, *u["climatologia"], pct=u["mhw_percentil"])
+        ref[f"p90_var_{z}"] = umbral_p90(sst, ini, fin, pct=u["mhw_percentil"])
+    df = pd.DataFrame(ref)
+    df.index.name = "dia_del_anio"
+    return df
+
+
 def construir_dataset_sst(diario: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     part = cfg["particion"]
     u = cfg["umbrales"]
-    # Climatología para ANOMALÍAS: solo datos anteriores a la validación (sin fuga)
-    clim_ini, clim_fin = str(diario.index.min().date()), str(pd.Timestamp(part["validacion"][0]) - pd.Timedelta(days=1))
+    clim_ini, clim_fin = periodo_climatologia(diario, cfg)
+    ref = referencias_sst(diario, cfg)
     X = {}
     Y = {}
 
     for z in ZONAS:
         sst = diario[f"sst_{z}"]
-        anom = anomalia(sst, climatologia(sst, clim_ini, clim_fin))
-        # Dos umbrales p90 distintos a propósito:
-        #  - p90_obj: definición estándar de MHW (Hobday, base 1991-2020) -> solo para el OBJETIVO
-        #  - p90_var: mismo cálculo pero solo con datos anteriores a validación -> para VARIABLES
-        #    (base 1991-2020 incluye 2019-2020, que son validación: sería fuga)
-        p90_obj = umbral_p90(sst, *u["climatologia"], pct=u["mhw_percentil"])
-        p90_var = umbral_p90(sst, clim_ini, clim_fin, pct=u["mhw_percentil"])
+        anom = anomalia(sst, ref[f"clim_{z}"])
+        p90_obj, p90_var = ref[f"p90_obj_{z}"], ref[f"p90_var_{z}"]
 
         X[f"sst_{z}"] = sst
         for l in LAGS_SST:
@@ -175,7 +196,10 @@ def construir_dataset_hipoxia(campanas: pd.DataFrame, dataset_sst: pd.DataFrame,
                     if not col.startswith("y_") and col != "particion"
                     and ("laguna" in col or "cuenca" in col or col.startswith("doy"))]
     df = df.join(dataset_sst[cols_diarias], how="left")
-    df = df[(df["dias_hasta_siguiente"] >= gap_min) & (df["dias_hasta_siguiente"] <= gap_max)]
+    # Se conserva la ÚLTIMA campaña (sin siguiente, dias_hasta_siguiente = NaN): no tiene objetivo y no
+    # se usa para entrenar, pero es justo la que necesita el servicio para predecir el futuro.
+    gap_ok = df["dias_hasta_siguiente"].between(gap_min, gap_max)
+    df = df[gap_ok | df["dias_hasta_siguiente"].isna()]
     df["anio"] = df.index.year  # para validación cruzada dejando un año fuera
     return df
 

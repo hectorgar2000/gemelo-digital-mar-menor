@@ -1,0 +1,12 @@
+# docker compose up --build   ->   http://localhost:8000/docs
+services:
+  api:
+    build: .
+    image: gemelo-mar-menor:0.4.0
+    ports:
+      - "8000:8000"
+    volumes:
+      # artefacto exportado del Model Registry (scripts/exportar_modelos.py) y estado del gemelo
+      - ./models/servicio:/app/models/servicio:ro
+      - ./data/processed:/app/data/processed:ro
+    restart: unless-stopped
