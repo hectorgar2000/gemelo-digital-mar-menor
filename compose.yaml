@@ -4,7 +4,7 @@
 services:
   api:
     build: .
-    image: gemelo-mar-menor:0.8.0
+    image: gemelo-mar-menor:0.9.0
     ports:
       - "8000:8000"
     volumes:
@@ -17,11 +17,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dashboard
-    image: gemelo-mar-menor-dashboard:0.8.0
+    image: gemelo-mar-menor-dashboard:0.9.0
     ports:
       - "8501:8501"
     environment:
-      GEMELO_API_URL: http://api:8000   # red interna de compose
+      GEMELO_API_URL: http://api:8000                  # red interna de compose (dashboard -> API)
+      GEMELO_API_URL_PUBLICA: http://localhost:8000    # enlaces que abre el navegador (visor 4D)
     depends_on:
       api:
         condition: service_healthy

@@ -16,6 +16,7 @@ from gemelo.config import DATA_RAW, RAIZ, RUTA_CONFIG, cargar_config
 from gemelo.procesado.features import (construir_dataset_hipoxia, construir_dataset_sst,
                                        grupo_variable, referencias_sst)
 from gemelo.procesado import meteo_futura
+from gemelo.procesado.cubo import construir_cubo, resumen_por_campana
 from gemelo.procesado.insitu import campanas_insitu
 from gemelo.procesado.series import construir_diario
 
@@ -109,7 +110,16 @@ if __name__ == "__main__":
         paso(f"    previsión real completa (7 d) para {int(completos.sum())} días base "
              f"({completos[completos].index.min().date()} → {completos[completos].index.max().date()})")
 
-    paso("6/6 manifiesto")
+    paso("6/7 cubo 4D in situ (visor CesiumJS)")
+    cubo = construir_cubo(cfg)
+    cubo.to_parquet(PROCESSED / "cubo_insitu.parquet")
+    resumen = resumen_por_campana(cubo, cfg["umbrales"]["hipoxia_mg_l"], cfg["umbrales"]["anoxia_mg_l"])
+    resumen.to_parquet(PROCESSED / "cubo_resumen.parquet")
+    paso(f"    {len(cubo):,} filas · {cubo.fecha.nunique()} campañas · "
+         f"{len(cubo) / cubo.fecha.nunique():,.0f} puntos 3D por campaña · máx. volumen en hipoxia "
+         f"{resumen.pct_volumen_hipoxia.max():.1f} % ({resumen.pct_volumen_hipoxia.idxmax().date()})")
+
+    paso("7/7 manifiesto")
     man = manifiesto(cfg, {"dataset_sst": sst, "dataset_hipoxia": hip})
     (PROCESSED / "manifest.json").write_text(json.dumps(man, indent=2, ensure_ascii=False), encoding="utf-8")
     grupos = {}

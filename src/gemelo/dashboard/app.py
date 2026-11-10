@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from gemelo.dashboard import graficos as G
-from gemelo.dashboard.cliente import URL_POR_DEFECTO, ClienteGemelo, ErrorAPI
+from gemelo.dashboard.cliente import URL_POR_DEFECTO, URL_PUBLICA, ClienteGemelo, ErrorAPI
 
 st.set_page_config(page_title="Gemelo digital · Mar Menor", page_icon="🌊", layout="wide")
 HORIZONTES = [1, 3, 7, 30]
@@ -91,6 +91,8 @@ with st.sidebar:
                           help="Por defecto, el último día con datos. Elige un día pasado para comparar con lo que ocurrió.")
     fecha_iso = fecha.isoformat()
     st.divider()
+    st.link_button("🧊 Abrir visor 4D (CesiumJS)", f"{URL_PUBLICA.rstrip('/')}/visor/", width="stretch",
+                   help="Oxígeno, temperatura, salinidad… de las campañas in situ en 3D y a lo largo del tiempo")
     st.caption(f"API: {salud['estado']} · {salud['modelos_sst']} modelos de SST · datos hasta {salud['ultima_fecha']}")
     if fecha != fin:
         st.info("Día del pasado: verás también lo que pasó realmente.", icon="🕑")

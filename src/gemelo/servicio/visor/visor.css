@@ -1,0 +1,29 @@
+html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #0e1117; }
+#mapa { position: absolute; inset: 0; }
+#panel {
+  position: absolute; top: 12px; left: 12px; width: 320px; max-height: calc(100% - 24px); overflow-y: auto;
+  background: rgba(14, 17, 23, 0.88); color: #e8e8e8; border-radius: 10px; padding: 14px 16px; box-sizing: border-box;
+  font-size: 13px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+}
+#panel h1 { font-size: 17px; margin: 0 0 4px; }
+.sub, .nota { color: #a9b0bb; font-size: 11.5px; margin: 4px 0 10px; line-height: 1.35; }
+label { display: block; margin: 8px 0 4px; }
+select, input[type=range] { width: 100%; }
+select { background: #1c2230; color: #e8e8e8; border: 1px solid #39414f; border-radius: 6px; padding: 4px; }
+.fila { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.fila label { flex: 1; margin: 0; white-space: nowrap; }
+.fila label select { width: auto; min-width: 58px; }
+button { background: #2b3445; color: #e8e8e8; border: 1px solid #39414f; border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+button:hover { background: #3a4660; }
+#fecha { margin-left: auto; font-size: 14px; }
+#serie { width: 100%; height: 70px; background: #151a24; border-radius: 6px; cursor: pointer; margin-top: 6px; }
+#leyenda { margin: 10px 0; }
+#rampa { height: 12px; border-radius: 4px; }
+#etiquetas { display: flex; justify-content: space-between; color: #a9b0bb; font-size: 11px; margin-top: 2px; }
+.check { display: flex; gap: 6px; align-items: center; }
+#info { background: #151a24; border-radius: 6px; padding: 8px 10px; margin: 10px 0; line-height: 1.6; }
+#info b { color: #fff; }
+#error { color: #ff8a80; font-size: 12px; }
+@media (max-width: 600px) {
+  #panel { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 50%; }
+}

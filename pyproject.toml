@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gemelo"
-version = "0.8.0"
+version = "0.9.0"
 description = "Gemelo digital marino del Mar Menor con IA explicable"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,6 +38,10 @@ dev = ["jupyterlab", "pytest", "ruff"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# El visor 4D (HTML/JS) viaja dentro del paquete: la imagen Docker lo instala sin modo editable
+[tool.setuptools.package-data]
+"gemelo.servicio" = ["visor/*"]
 
 [tool.ruff]
 line-length = 100

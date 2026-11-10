@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visor 4D · Mar Menor</title>
+  <!-- CesiumJS desde CDN, versión fijada. Sin Cesium ion (ni token): mapa base de OpenStreetMap. -->
+  <script>window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/";</script>
+  <script src="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <link href="visor.css" rel="stylesheet">
+</head>
+<body>
+  <div id="mapa"></div>
+
+  <aside id="panel">
+    <h1>Mar Menor · 4D</h1>
+    <p class="sub">Campañas in situ de la UPCT (2017–2024): 10 profundidades de 0,5 a 5 m, una por semana.</p>
+
+    <label>Variable
+      <select id="variable"></select>
+    </label>
+
+    <div class="fila">
+      <button id="anterior" title="Campaña anterior">◀</button>
+      <button id="play" title="Reproducir">▶</button>
+      <button id="siguiente" title="Campaña siguiente">▶|</button>
+      <strong id="fecha">—</strong>
+    </div>
+    <input id="tiempo" type="range" min="0" max="0" value="0" aria-label="Campaña">
+
+    <canvas id="serie" width="300" height="70" title="Volumen de la laguna con O₂ < 4 mg/L. Haz clic para ir a esa campaña."></canvas>
+    <p class="nota">% del volumen con O₂ &lt; 4 mg/L en cada campaña (clic para saltar).</p>
+
+    <div id="leyenda"><div id="rampa"></div><div id="etiquetas"></div></div>
+
+    <label class="check"><input type="checkbox" id="soloHipoxia"> Solo agua con O₂ &lt; 4 mg/L (hipoxia)</label>
+
+    <div class="fila">
+      <label>Desde <select id="profMin"></select> m</label>
+      <label>hasta <select id="profMax"></select> m</label>
+    </div>
+
+    <label>Exageración vertical ×<span id="exagValor">600</span>
+      <input id="exag" type="range" min="100" max="2000" step="100" value="600">
+    </label>
+
+    <div id="info"></div>
+    <p class="nota">Cada punto es un bloque de ~330 × 450 m. Las capas se apilan con la superficie arriba.
+      Datos: Servidor de Datos Científicos del Mar Menor (UPCT), mapas interpolados L2.</p>
+    <p id="error" role="alert"></p>
+  </aside>
+
+  <script src="visor.js"></script>
+</body>
+</html>

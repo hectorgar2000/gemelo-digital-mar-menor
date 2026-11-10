@@ -119,5 +119,31 @@ def test_monitor(cliente):
     assert j["hipoxia"]["estado"] in ("OK", "SIN_DATOS")
 
 
+def test_cubo_4d(cliente):
+    f = cliente.get("/cubo/fechas")
+    if f.status_code == 422:
+        pytest.skip("sin cubo 4D (python scripts/construir_dataset.py)")
+    meta = f.json()
+    assert {"o2", "temp", "sal"} <= set(meta["variables"]) and meta["variables"]["o2"]["unidad"] == "mg/L"
+    assert meta["profundidades"][0] == 0.5 and meta["profundidades"][-1] == 5.0
+    campana = max(meta["campanas"], key=lambda c: c["pct_volumen_anoxia"])
+    c = cliente.get("/cubo", params={"fecha": campana["fecha"], "variable": "o2"}).json()
+    assert c["n"] == len(c["lon"]) == len(c["lat"]) == len(c["profundidad"]) == len(c["valor"]) > 1000
+    assert all(37.6 < y < 37.85 for y in c["lat"]) and all(-0.9 < x < -0.7 for x in c["lon"])
+    # el % de volumen anóxico declarado coincide con los puntos enviados
+    anoxia = 100 * sum(v < 2.0 for v in c["valor"]) / c["n"]
+    assert anoxia == pytest.approx(c["resumen"]["pct_volumen_anoxia"], abs=0.5)
+    fechas = {x["fecha"] for x in meta["campanas"]}
+    sin_campana = next(d for d in ("2019-12-25", "2020-01-01", "2021-12-25") if d not in fechas)
+    assert cliente.get("/cubo", params={"fecha": sin_campana, "variable": "o2"}).status_code == 422
+    assert cliente.get("/cubo", params={"fecha": campana["fecha"], "variable": "nitratos"}).status_code == 422
+
+
+def test_visor_4d_se_sirve_con_cesium_fijado(cliente):
+    r = cliente.get("/visor/")
+    assert r.status_code == 200 and "cesium@1.120.0" in r.text and "visor.js" in r.text
+    assert cliente.get("/visor/visor.js").status_code == 200
+
+
 def test_zona_invalida_la_rechaza_pydantic(cliente):
     assert cliente.post("/predict", json={"zona": "atlantico"}).status_code == 422

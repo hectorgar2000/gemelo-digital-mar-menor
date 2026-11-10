@@ -8,7 +8,10 @@ from contextlib import asynccontextmanager
 from datetime import date
 from typing import Literal
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from gemelo.servicio.escenarios import (DRIVERS, METEO_FUTURO, NO_DISPONIBLES, NOTAS, PERIODOS, MotorEscenarios,
@@ -30,9 +33,13 @@ app = FastAPI(
     title="Gemelo digital del Mar Menor",
     description="Predicción de temperatura del mar y olas de calor marinas (laguna y costa) y riesgo de "
                 "hipoxia, con intervalos de incertidumbre y explicaciones SHAP.",
-    version="0.8.0",
+    version="0.9.0",
     lifespan=ciclo_de_vida,
 )
+
+
+# Visor 4D (CesiumJS): página estática servida por la propia API (mismo origen que /cubo)
+app.mount("/visor", StaticFiles(directory=Path(__file__).parent / "visor", html=True), name="visor")
 
 
 def gemelo() -> Gemelo:
@@ -123,6 +130,16 @@ def modelos():
                 for k, v in m["sst"].items()},
         "hipoxia": {k: m["hipoxia"][k] for k in ("version_registro", "umbral_alerta", "metricas_loyo")},
     }
+
+
+@app.get("/cubo/fechas", summary="Campañas del cubo 4D in situ, con volumen en hipoxia y variables disponibles")
+def cubo_fechas():
+    return _ejecutar(gemelo().cubo_fechas)
+
+
+@app.get("/cubo", summary="Puntos 3D (lon, lat, profundidad, valor) de una campaña in situ para el visor 4D")
+def cubo(fecha: date, variable: Literal["o2", "temp", "sal", "chl", "turb"] = "o2"):
+    return _ejecutar(gemelo().cubo, fecha, variable)
 
 
 @app.get("/monitor", summary="Último informe del monitor de deriva (estado de cada modelo)")

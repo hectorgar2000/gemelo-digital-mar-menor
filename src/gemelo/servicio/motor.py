@@ -19,6 +19,7 @@ import xgboost as xgb
 from gemelo.config import RAIZ, cargar_config
 from gemelo.procesado.features import _doy, grupo_variable
 from gemelo.monitor.metricas import cuantiles_conformales
+from gemelo.procesado.cubo import UNIDADES
 from gemelo.procesado.meteo_futura import desde_tabla
 
 
@@ -38,6 +39,7 @@ class ErrorGemelo(ValueError):
 class Gemelo:
     def __init__(self, dir_modelos: Path = DIR_MODELOS, dir_datos: Path = DIR_DATOS):
         self.manifiesto = json.loads((dir_modelos / "servicio.json").read_text(encoding="utf-8"))
+        self.dir_datos = dir_datos
 
         def cargar(fichero):
             m = xgb.XGBRegressor()
@@ -268,6 +270,46 @@ class Gemelo:
             "nota": "contribución > 0: empuja a calentar más de lo que diría la persistencia; < 0: a enfriar. "
                     "Explica lo que usa el modelo, no una relación causal.",
         }
+
+    # ------------------------------------------------------------------ cubo 4D in situ (visor)
+    @cached_property
+    def _cubo(self) -> dict:
+        """Se carga la primera vez que se pide (unos 110 MB en memoria): el arranque no se ralentiza."""
+        ruta = self.dir_datos / "cubo_insitu.parquet"
+        if not ruta.exists():
+            raise ErrorGemelo("No hay cubo 4D: ejecuta scripts/construir_dataset.py")
+        c = pd.read_parquet(ruta)
+        variables = [v for v in UNIDADES if v in c.columns]
+        rangos = {v: [round(float(c[v].quantile(0.02)), 2), round(float(c[v].quantile(0.98)), 2)] for v in variables}
+        por_fecha = {f: g for f, g in c.groupby("fecha")}
+        resumen = pd.read_parquet(self.dir_datos / "cubo_resumen.parquet")
+        return {"por_fecha": por_fecha, "rangos": rangos, "variables": variables, "resumen": resumen}
+
+    def cubo_fechas(self) -> dict:
+        c = self._cubo
+        r = c["resumen"].reset_index()
+        r["fecha"] = r["fecha"].dt.strftime("%Y-%m-%d")
+        return {"variables": {v: {"unidad": UNIDADES[v], "rango_color": c["rangos"][v]} for v in c["variables"]},
+                "profundidades": sorted(float(p) for p in next(iter(c["por_fecha"].values()))["profundidad"].unique()),
+                "campanas": r.to_dict(orient="records")}
+
+    def cubo(self, fecha, variable: str) -> dict:
+        c = self._cubo
+        if variable not in c["variables"]:
+            raise ErrorGemelo(f"Variable '{variable}' no disponible. Opciones: {c['variables']}.")
+        f = pd.Timestamp(fecha)
+        if f not in c["por_fecha"]:
+            fechas = pd.DatetimeIndex(list(c["por_fecha"]))
+            cercana = fechas[np.argmin(np.abs((fechas - f).days))]
+            raise ErrorGemelo(f"No hay campaña el {f.date()} (la más cercana: {cercana.date()}).")
+        g = c["por_fecha"][f].dropna(subset=[variable])
+        r = c["resumen"].loc[f]
+        return {"fecha": str(f.date()), "variable": variable, "unidad": UNIDADES[variable],
+                "rango_color": c["rangos"][variable], "n": len(g),
+                # columnas en vez de una lista de objetos: el JSON pesa ~4 veces menos
+                "lon": g["lon"].round(5).tolist(), "lat": g["lat"].round(5).tolist(),
+                "profundidad": g["profundidad"].round(2).tolist(), "valor": g[variable].round(3).tolist(),
+                "resumen": {k: (None if pd.isna(v) else float(v)) for k, v in r.items()}}
 
     # ------------------------------------------------------------------ hipoxia
     @property

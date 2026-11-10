@@ -5,6 +5,9 @@ import httpx
 import pandas as pd
 
 URL_POR_DEFECTO = os.environ.get("GEMELO_API_URL", "http://127.0.0.1:8000")
+# URL de la API vista desde el NAVEGADOR del usuario (para enlaces como el visor 4D). En Docker, el dashboard
+# habla con la API por la red interna (http://api:8000), que el navegador no puede resolver.
+URL_PUBLICA = os.environ.get("GEMELO_API_URL_PUBLICA", URL_POR_DEFECTO)
 
 
 class ErrorAPI(RuntimeError):

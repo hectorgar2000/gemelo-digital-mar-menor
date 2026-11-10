@@ -50,6 +50,7 @@ uvicorn gemelo.servicio.api:app         # http://127.0.0.1:8000/docs
 streamlit run src/gemelo/dashboard/app.py   # dashboard (necesita la API arrancada)
 python scripts/ciclo_mantenimiento.py   # monitor de deriva -> reentrenamiento si hace falta -> exportar
 docker compose up --build               # API (:8000) + dashboard (:8501) en contenedores
+                                        # visor 4D: http://localhost:8000/visor/
 ```
 
 Los notebooks usan el kernel **Python (gemelo)**.
@@ -67,7 +68,7 @@ Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, 
 | 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker ([detalle](docs/fase4_mlaas.md)) | ✅ |
 | 5 · Escenarios | `/scenario` con incertidumbre ([detalle](docs/fase5_escenarios.md)) | ✅ |
 | 6 · Dashboard | Streamlit de punta a punta ([detalle](docs/fase6_dashboard.md)) | ✅ |
-| 7 · Evolución | Previsión meteo como entrada ✅ ([detalle](docs/fase7_prevision.md)) · deriva y reentrenamiento ✅ ([detalle](docs/fase7_deriva.md)) · 3D/4D | ⏳ |
+| 7 · Evolución | Previsión meteo como entrada ✅ ([detalle](docs/fase7_prevision.md)) · deriva y reentrenamiento ✅ ([detalle](docs/fase7_deriva.md)) · visor 3D/4D ✅ ([detalle](docs/fase7_visor4d.md)) | ✅ |
 
 ## Fuentes de datos
 - [Copernicus Marine Service](https://marine.copernicus.eu) — SST, clorofila, física y biogeoquímica del Mediterráneo.

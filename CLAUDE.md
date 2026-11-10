@@ -77,6 +77,12 @@
 - Tras un reentrenamiento, los tests no pueden asumir que 2024–2026 está fuera de muestra: comprobar contra `datos_hasta`.
 - Corrección del sesgo de la previsión: se mantiene `fija`. La estacional mejora la previsión pero no la SST (evaluado 2026-11-10). El aviso de sesgo del monitor es informativo. Cualquier cambio de corrección se valida por su efecto en la SST con modelos fuera de muestra, no por el error de la previsión.
 
+## Fase 7 · bloque 3: visor 3D/4D (ver docs/fase7_visor4d.md) · v0.9.0
+- `gemelo.procesado.cubo` -> `data/processed/cubo_insitu.parquet` y `cubo_resumen.parquet` (paso 6/7 del pipeline). No importar xarray a nivel de módulo: la API lo importa por `UNIDADES`.
+- API: `GET /cubo/fechas`, `GET /cubo` (carga perezosa) y visor estático en `/visor` (`src/gemelo/servicio/visor/`, incluido como `package-data`).
+- CesiumJS 1.120.0 por CDN, sin Cesium ion. En Docker el enlace del dashboard usa `GEMELO_API_URL_PUBLICA`.
+- Las capturas del visor con WebGL pueden salir en negro o sin mapa si se toman antes de componer o de cargar las teselas: comprobar el estado (`visor.scene.globe.tilesLoaded`) antes de dar algo por roto.
+
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.
 - Al entrenar o evaluar a horizonte h, usar `features.filas_de_particion()` (purga de frontera).
