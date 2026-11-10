@@ -211,6 +211,7 @@ def construir_dataset_hipoxia(campanas: pd.DataFrame, dataset_sst: pd.DataFrame,
 
 # ---------------------------------------------------------------- grupos (para SHAP agrupado)
 GRUPOS = [  # (grupo, función que reconoce la columna); el primero que encaja gana
+    ("meteo_prevista", lambda c: c.startswith("prev") and c[4:5].isdigit()),  # Fase 7: prev{w}_...
     ("calendario", lambda c: c.startswith("doy_")),
     ("oxigeno_in_situ", lambda c: "o2_" in c or "hipoxia" in c or "anoxia" in c),
     ("estratificacion", lambda c: "estrat" in c or "mld_" in c),
