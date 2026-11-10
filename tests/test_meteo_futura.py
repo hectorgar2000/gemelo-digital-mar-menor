@@ -78,6 +78,42 @@ def test_correccion_de_sesgo():
     assert corr[3]["t2m"].iloc[40] == pytest.approx(3.0)
 
 
+def _error_sintetico():
+    idx = pd.date_range("2022-01-01", "2025-12-31", freq="D")
+    estacional = 2 * np.cos(2 * np.pi * (idx.day_of_year - 15) / 365)        # sesgo estacional ±2
+    salto = np.where(idx >= "2025-06-01", -3.0, 0.0)                            # cambio de modelo
+    return pd.Series(estacional + salto, index=idx)
+
+
+@pytest.mark.parametrize("metodo", ["movil", "estacional", "estacional_movil"])
+def test_sesgo_causal_no_usa_errores_futuros(metodo):
+    """La corrección para el objetivo T solo puede usar errores de objetivos <= T - k - retraso."""
+    e = _error_sintetico()
+    k, retraso, t = 3, 5, pd.Timestamp("2025-03-10")
+    s1 = M.sesgo_causal(e, k, metodo, retraso=retraso)
+    e2 = e.copy()
+    e2[e2.index > t - pd.Timedelta(days=k + retraso)] += 50                     # cambia lo que aún no se sabía
+    s2 = M.sesgo_causal(e2, k, metodo, retraso=retraso)
+    assert s1[t] == pytest.approx(s2[t])
+
+
+def test_sesgo_estacional_y_movil_recuperan_lo_que_deben():
+    e = _error_sintetico()
+    est = M.sesgo_causal(e, 1, "estacional")
+    mov = M.sesgo_causal(e, 1, "movil")
+    # el estacional aprende la estación (antes del salto)
+    assert est["2024-07-15"] == pytest.approx(e["2024-07-15"], abs=0.4)
+    assert est["2025-01-15"] == pytest.approx(e["2025-01-15"], abs=0.4)
+    # el estacional solo no ve el salto de 2025-06...
+    assert abs(est["2025-09-15"] - e["2025-09-15"]) > 2
+    # ...el móvil sí: con un error que es SOLO el salto, a los 2 meses lo ha absorbido por completo
+    solo_salto = pd.Series(np.where(e.index >= "2025-06-01", -3.0, 0.0), index=e.index)
+    mov = M.sesgo_causal(solo_salto, 1, "movil")
+    assert mov["2025-05-20"] == pytest.approx(0.0) and mov["2025-09-15"] == pytest.approx(-3.0)
+    # (con estación además, el móvil va con ~2 meses de retraso: por eso no es el mejor en los datos reales)
+    assert M.sesgo_causal(e, 1, "movil")["2025-09-15"] != pytest.approx(e["2025-09-15"], abs=0.3)
+
+
 def test_grupo_meteo_prevista():
     assert grupo_variable("prev3_prec_cuenca") == "meteo_prevista"
     assert grupo_variable("prec_cuenca_suma7") == "lluvia"               # no confundir con 'prev'

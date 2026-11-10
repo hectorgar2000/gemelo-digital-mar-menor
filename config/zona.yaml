@@ -85,6 +85,10 @@ prevision:
   inicio: "2024-02-01"
   dias_max: 7                                  # antelación máxima archivada
   calibracion: ["2024-02-01", "2024-07-31"]    # sesgo previsión - ERA5 (excluido de la evaluación)
+  # Corrección del sesgo: 'fija' (media de `calibracion`), o causales: 'estacional', 'movil', 'estacional_movil'.
+  # Evaluado 2026-11-10 (docs/fase7_deriva.md): la estacional mejora la previsión (-3 % RMSE; -19 % t2m a 1 d)
+  # pero NO la SST (-0,2 % a -1 %), así que se mantiene 'fija'.
+  correccion: {metodo: fija, retraso_dias: 5, dias_movil: 60, margen_estacional: 45}
   evaluacion: ["2024-08-01", "2026-09-30"]     # prueba honesta con previsiones reales
   variables_horarias: [temperature_2m, wind_speed_10m, wind_direction_10m, precipitation, shortwave_radiation]
 

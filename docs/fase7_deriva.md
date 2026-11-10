@@ -91,10 +91,38 @@ Resultado del ciclo del 30-09-2026 (lo disparó el monitor):
   - El monitor no propone reentrenar un modelo reentrenado hace menos de 90 días (`en_espera_tras_reentreno`).
   - `reentrenar.py` se niega a comparar si el campeón ya vio la ventana de evaluación.
 
+## Recalibración del sesgo de la previsión: investigada y no promocionada
+
+El monitor avisó de que el sesgo corregido del viento previsto a 7 días en la cuenca había cambiado (−2,3 km/h frente a ±2 de umbral).
+
+**Diagnóstico (sesgo bruto previsión − ERA5, mes a mes, 2024–2026):** hay dos efectos.
+1. **Sesgo estacional** en la temperatura del aire de la cuenca: unos −0,6 °C en verano y −2 °C en invierno, que se repite cada año. La corrección fija (calibrada en feb–jul 2024) se pasa en verano y se queda corta en invierno.
+2. **Salto en 2026** en las previsiones a 7 días de la cuenca, probablemente por un cambio de modelo del proveedor. Ejemplos: viento en junio de +2,0/+4,1 (2024/2025) a −1,8 km/h (2026); temperatura ~1 °C más fría.
+
+**Cuatro correcciones comparadas**, todas causales (cada previsión se corrige solo con errores conocidos el día que se emitió, contando 5 días de retraso de ERA5):
+
+| | Fija (actual) | Móvil 60 d | **Estacional** | Estacional + móvil |
+|---|---|---|---|---|
+| Error de la previsión frente a ERA5 (media var × antelación) | 1,000 | 0,981 | **0,968** | 0,980 |
+| t2m a 1 día (RMSE °C) | 0,577 | 0,498 | **0,468** | 0,472 |
+| **Error de la SST** (modelos v2, fuera de muestra), ago-24 → sep-26 | **1,000** | +0,33 % | +0,24 % | — |
+| **Error de la SST**, solo 2026 (tras el salto) | **1,000** | +1,00 % | +0,13 % | — |
+
+**Decisión: se mantiene la corrección fija.** La estacional mejora la previsión (−19 % en la temperatura a 1 día) pero **no mejora la SST**, que es lo que importa: queda entre +0,1 y +1 % peor.
+
+Encaja con lo que ya sabíamos:
+- Los modelos se apoyan sobre todo en el **viento**, y a 7 días su error de previsión (~6 km/h) es mucho mayor que el sesgo (~2 km/h).
+- La temperatura del aire, donde más gana la corrección, pesa poco.
+
+Es la misma disciplina que con los modelos: no se cambia lo que no mejora el objetivo.
+
+- Los métodos causales quedan implementados y probados (`meteo_futura.sesgo_causal`) y se activan con `prevision.correccion.metodo`.
+- El aviso del monitor se mantiene, porque el salto es real, pero es **informativo** y no dispara reentrenamiento.
+- **Hay que revisarlo** si la previsión empieza a pesar más en los modelos (por ejemplo, tras un reentrenamiento) o si el salto crece.
+
 ## Limitaciones
 - La decisión se toma con **una sola ventana de 180 días** (sobre todo primavera y verano). Las mejoras del 2–4 % de los modelos de 1 día podrían ser ruido; las del 7–14 % son claras.
 - El modelo desplegado (reajustado con todo) no es exactamente el evaluado. Es la práctica habitual, pero su rendimiento real solo se conocerá cuando lleguen datos nuevos.
 - Los respaldos sin previsión (v1) no se reentrenan.
 - La hipoxia **no se puede vigilar**: no hay datos in situ desde julio de 2024.
-- El monitor detecta un **cambio del sesgo del viento previsto** (−2,3 km/h a 7 días en la cuenca, frente a ±2 de umbral). Conviene recalibrar la corrección de sesgo de la previsión con datos recientes; queda como siguiente paso.
 - La descarga de datos nuevos (ampliar `periodo.fin`) sigue siendo manual. Para tiempo real harían falta los productos NRT de Copernicus, sin verificar.

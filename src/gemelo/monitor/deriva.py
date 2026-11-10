@@ -198,7 +198,10 @@ class Monitor:
                         motivos.append(f"sesgo de {var} en {punto} a {k} d: {b:+.2f} (umbral ±{umbral})")
         if not sesgos:
             return {"estado": "SIN_DATOS", "motivos": [f"sin previsión archivada antes de {fecha.date()}"]}
-        return {"estado": "AVISO" if motivos else "OK", "motivos": motivos, "sesgos": sesgos}
+        return {"estado": "AVISO" if motivos else "OK", "motivos": motivos, "sesgos": sesgos,
+                "nota": "Informativo: no dispara reentrenamiento. Un cambio de sesgo de este tamaño se evaluó en "
+                        "2026-11 y no afectaba a la SST (<1 %); ver docs/fase7_deriva.md antes de cambiar la "
+                        "corrección (config prevision.correccion)."}
 
     def hipoxia(self, fecha) -> dict:
         previas = self.g.campanas[self.g.campanas <= fecha]

@@ -75,6 +75,7 @@
 - Reentrenamiento: `scripts/reentrenar.py` (campeón vs. retador, ventana de 180 d, mejora ≥ 2 %, alias `@anterior`). Ciclo completo: `scripts/ciclo_mantenimiento.py`.
 - **`datos_hasta` por modelo**: usar `Gemelo.datos_hasta(info)` para todo lo que dependa de "qué vio el modelo" (`visto_en_entrenamiento`, residuos del intervalo, rendimiento del monitor, rangos). No usar `fin_entrenamiento_sst` para modelos reentrenados.
 - Tras un reentrenamiento, los tests no pueden asumir que 2024–2026 está fuera de muestra: comprobar contra `datos_hasta`.
+- Corrección del sesgo de la previsión: se mantiene `fija`. La estacional mejora la previsión pero no la SST (evaluado 2026-11-10). El aviso de sesgo del monitor es informativo. Cualquier cambio de corrección se valida por su efecto en la SST con modelos fuera de muestra, no por el error de la previsión.
 
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.

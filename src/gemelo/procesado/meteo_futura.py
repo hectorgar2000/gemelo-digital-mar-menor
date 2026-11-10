@@ -59,6 +59,55 @@ def sesgo_prevision(prev: dict[int, pd.DataFrame], era5: pd.DataFrame, punto: st
     return pd.DataFrame(filas).T  # índice = antelación k
 
 
+def sesgo_causal(error: pd.Series, k: int, metodo: str, retraso: int = 5, dias_movil: int = 60,
+                 margen_estacional: int = 45) -> pd.Series:
+    """Sesgo a restar a la previsión de antelación k para cada fecha OBJETIVO T, usando SOLO errores que ya se
+    conocían al emitirla (objetivos <= T - k - retraso; `retraso` = días que tarda en publicarse ERA5).
+
+    error  = previsión - ERA5 por fecha objetivo (antelación k).
+    metodo:
+      'movil'              media de los últimos `dias_movil` días conocidos: se adapta a saltos (cambio de modelo).
+      'estacional'         media de los errores de la misma época del año (± margen) de toda la historia conocida.
+      'estacional_movil'   estacional + media móvil de lo que el estacional no explica (las dos cosas).
+    """
+    e = error.dropna().asfreq("D")
+    desfase = pd.Timedelta(days=k + retraso)
+    if metodo == "movil":
+        return e.rolling(f"{dias_movil}D", min_periods=20).mean().shift(freq=desfase).reindex(error.index)
+
+    # estacional causal: para cada T, errores con fecha <= T - desfase y día del año a <= margen
+    fechas = e.dropna().index
+    valores = e.dropna().values
+    dias = fechas.values.astype("datetime64[D]").astype(np.int64)
+    doy = _doy(fechas)
+    estacional = pd.Series(np.nan, index=error.index)
+    for t in error.index:
+        limite = (t - desfase).value // 86_400_000_000_000
+        d = np.abs(doy - _doy(pd.DatetimeIndex([t]))[0])
+        sel = (dias <= limite) & (np.minimum(d, 365 - d) <= margen_estacional)
+        if sel.sum() >= 20:
+            estacional[t] = valores[sel].mean()
+    if metodo == "estacional":
+        return estacional
+    resto = (error - estacional).dropna().asfreq("D")
+    movil_resto = resto.rolling(f"{dias_movil}D", min_periods=20).mean().shift(freq=desfase).reindex(error.index)
+    return estacional + movil_resto.fillna(0.0)
+
+
+def corregir_causal(prev: dict[int, pd.DataFrame], era5: pd.DataFrame, punto: str, metodo: str,
+                    **kw) -> dict[int, pd.DataFrame]:
+    """Corrige cada variable y antelación con su sesgo causal. Donde aún no hay historia suficiente, NaN
+    (mejor no usar la previsión que usarla mal corregida: el servicio pasa al modelo de respaldo)."""
+    out = {}
+    for k, d in prev.items():
+        d = d.copy()
+        for v in CORREGIR_SESGO:
+            err = d[v] - era5[f"{v}_{punto}"].reindex(d.index)
+            d[v] = d[v] - sesgo_causal(err, k, metodo, **kw)
+        out[k] = d
+    return out
+
+
 def corregir(prev: dict[int, pd.DataFrame], sesgo: pd.DataFrame) -> dict[int, pd.DataFrame]:
     out = {}
     for k, d in prev.items():
@@ -109,6 +158,7 @@ def preparar(cfg: dict, diario: pd.DataFrame, ref: pd.DataFrame, indice: pd.Date
     Devuelve (f_era5, f_prev, prev_corregida, sesgos); las tres últimas son None si no hay previsiones."""
     from gemelo.config import DATA_RAW
     puntos, p = list(cfg["meteo"]["puntos"]), cfg["prevision"]
+    corr = p.get("correccion", {"metodo": "fija"})
     f_era5 = construir(fuente_era5(diario), puntos, ref, indice)
     prev, sesgos = {}, {}
     for pt in puntos:
@@ -116,8 +166,12 @@ def preparar(cfg: dict, diario: pd.DataFrame, ref: pd.DataFrame, indice: pd.Date
         if not ruta.exists():
             return f_era5, None, None, None
         bruto = prevision_por_antelacion(pd.read_parquet(ruta), p["dias_max"])
-        sesgos[pt] = sesgo_prevision(bruto, diario, pt, *p["calibracion"])
-        prev[pt] = corregir(bruto, sesgos[pt])
+        sesgos[pt] = sesgo_prevision(bruto, diario, pt, *p["calibracion"])  # se guarda siempre (referencia)
+        if corr["metodo"] == "fija":
+            prev[pt] = corregir(bruto, sesgos[pt])
+        else:
+            prev[pt] = corregir_causal(bruto, diario, pt, corr["metodo"], retraso=corr["retraso_dias"],
+                                       dias_movil=corr["dias_movil"], margen_estacional=corr["margen_estacional"])
     f_prev = construir(fuente_prevision(prev), puntos, ref, indice)
     return f_era5, f_prev, prev, sesgos
 
