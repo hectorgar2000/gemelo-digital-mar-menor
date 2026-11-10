@@ -97,6 +97,10 @@ class Gemelo:
             raise ErrorGemelo(f"No hay modelo para zona={zona}, h={h}. Zonas: {self.zonas}; horizontes: {self.horizontes}.")
         return nombre, self.modelos[nombre], self.manifiesto["sst"][nombre]
 
+    def datos_hasta(self, info: dict) -> pd.Timestamp:
+        """Última fecha OBJETIVO que vio el modelo al entrenar (los reentrenados ven datos más recientes)."""
+        return pd.Timestamp(info.get("datos_hasta", self.fin_entrenamiento_sst))
+
     def hay_prevision(self, fecha, ventana: int) -> bool:
         if self.f_prev is None or fecha not in self.f_prev.index:
             return False
@@ -185,6 +189,9 @@ class Gemelo:
         ci = self.cfg_intervalo
         ini = fecha - pd.Timedelta(days=365 * ci["anios"] + h)
         fechas = self.ds.loc[ini:fecha - pd.Timedelta(days=h)].index
+        # Solo errores FUERA de muestra: tras un reentrenamiento, los días que el modelo ya vio tienen
+        # errores artificialmente pequeños y estrecharían el intervalo.
+        fechas = fechas[fechas + pd.Timedelta(days=h) > self.datos_hasta(info)]
         X = self.matriz(fechas, info["variables"])
         y = self.ds.loc[fechas, f"y_delta_{zona}_h{h}"]
         ok = y.notna() & X.notna().all(axis=1)
@@ -226,7 +233,7 @@ class Gemelo:
             "prob_superar_umbral": round(float(np.mean(sst_prev + res > umbral)), 3),
             "metodo_intervalo": metodo,
             "sst_real": None if pd.isna(real) else round(float(real), 3),  # solo si ya se conoce (backtesting)
-            "visto_en_entrenamiento": bool(fecha_obj <= self.fin_entrenamiento_sst),
+            "visto_en_entrenamiento": bool(fecha_obj <= self.datos_hasta(info)),
             "usa_prevision_meteo": usa_prev,
             "modelo": {"nombre": clave.split("__")[0], "version_registro": info["version_registro"],
                        "variante": "con_prevision" if usa_prev else "sin_prevision"},

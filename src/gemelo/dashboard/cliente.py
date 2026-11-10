@@ -45,6 +45,9 @@ class ClienteGemelo:
         d = self._pedir("GET", "/hipoxia/campanas")["datos"]
         return pd.DataFrame(d).assign(fecha=lambda x: pd.to_datetime(x["fecha"])).set_index("fecha")
 
+    def monitor(self):
+        return self._pedir("GET", "/monitor")
+
     def drivers(self):
         return self._pedir("GET", "/scenario/drivers")
 

@@ -40,14 +40,16 @@ def exportar_sst(client, nombre, alias, sufijo=""):
         cuantiles = json.load(f)
     variables = modelo.get_booster().feature_names
     usa_prevision = mv.tags.get("usa_prevision") == "true"
+    # hasta qué fecha OBJETIVO vio datos el modelo (los de las fases 3-7 se entrenaron hasta fin de validación)
+    datos_hasta = mv.tags.get("datos_hasta", cargar_config()["particion"]["validacion"][1])
     print(f"  {nombre}@{alias} v{mv.version} -> {fichero}" + (" (con previsión)" if usa_prevision else ""))
     return {
         "fichero": fichero, "version_registro": int(mv.version), "run_id": run.info.run_id, "variables": variables,
-        "usa_prevision": usa_prevision,
+        "usa_prevision": usa_prevision, "datos_hasta": datos_hasta,
         "ventana_meteo": int(mv.tags["ventana_meteo"]) if usa_prevision else None,
         "cuantiles_residuo_validacion": cuantiles,
         "metricas": {k: round(v, 4) for k, v in run.data.metrics.items()
-                     if k.startswith(("test_", "rmse_", "skill_", "f1_"))},
+                     if k.startswith(("test_", "rmse_", "skill_", "f1_", "mejora"))},
     }
 
 

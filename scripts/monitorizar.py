@@ -23,7 +23,8 @@ FIGURAS = RAIZ / "docs" / "figuras" / "fase7"
 
 
 def imprimir(inf):
-    print(f"\n=== Monitor {inf['fecha']} · estado global: {inf['estado_global']} · reentrenar: {inf['reentrenar'] or 'nada'}")
+    print(f"\n=== Monitor {inf['fecha']} · estado global: {inf['estado_global']} · reentrenar: {inf['reentrenar'] or 'nada'}"
+          + (f" · en espera tras reentreno: {inf['en_espera_tras_reentreno']}" if inf.get("en_espera_tras_reentreno") else ""))
     for n, m in inf["modelos"].items():
         r, e = m["rendimiento"], m["entradas"]
         skill = f"{r['skill']:+.1%}" if r["skill"] is not None else "  —  "

@@ -29,14 +29,24 @@ class Monitor:
         self.cm = self.cfg["monitor"]
         # Referencia = lo que vieron los modelos al entrenar (hasta fin de validación); las variables de
         # previsión se entrenaron con ERA5, así que su referencia es la tabla ERA5.
-        fin = self.g.fin_entrenamiento_sst
-        ref = self.g.ds.loc[:fin]
+        total = self.g.ds
         ruta = DIR_DATOS / "meteo_futura_era5.parquet"
         if ruta.exists():
-            ref = ref.join(pd.read_parquet(ruta).loc[:fin])
-        self.ref = ref
-        self.minimo, self.maximo = ref.min(numeric_only=True), ref.max(numeric_only=True)
-        self._series = {}
+            total = total.join(pd.read_parquet(ruta))
+        self._ref_total = total
+        self.ref = total.loc[:self.g.fin_entrenamiento_sst]   # referencia base (calibración)
+        self._rangos, self._series = {}, {}
+
+    def referencia(self, info) -> pd.DataFrame:
+        """Lo que vio ESE modelo al entrenar (los reentrenados ven datos más recientes)."""
+        return self._ref_total.loc[:self.g.datos_hasta(info)]
+
+    def rango(self, info):
+        clave = self.g.datos_hasta(info)
+        if clave not in self._rangos:
+            r = self.referencia(info)
+            self._rangos[clave] = (r.min(numeric_only=True), r.max(numeric_only=True))
+        return self._rangos[clave]
 
     # ------------------------------------------------------------------ series de lo servido
     def _variantes(self, nombre):
@@ -61,16 +71,19 @@ class Monitor:
             pred[ok] = m.predict(X[ok])
             q = info["cuantiles_residuo_validacion"]
             fechas = X.index[(X.index >= DESDE_MONITOR) & ok.values]
+            hasta = self.g.datos_hasta(info)
+            res = y - pred
+            res = res[res.index + pd.Timedelta(days=h) > hasta]   # solo errores fuera de muestra (como la API)
             # misma función (cascada estacional) que usa la API en Gemelo.residuos_recientes
-            iv = D.intervalos_cascada(y - pred, fechas, h, self.g.cfg_intervalo,
+            iv = D.intervalos_cascada(res, fechas, h, self.g.cfg_intervalo,
                                       (q["0.05"], q["0.95"])).reindex(X.index)
             por_variante[var] = pd.DataFrame({"pred": pred, "lo": iv["lo"], "hi": iv["hi"], "metodo": iv["metodo"],
-                                              "disponible": ok})
+                                              "disponible": ok, "datos_hasta": hasta})
         servido = por_variante["principal"].copy()
         servido["variante"] = "principal"
         if "respaldo" in por_variante:
             usar_resp = ~servido["disponible"]
-            cols = ["pred", "lo", "hi", "metodo"]
+            cols = ["pred", "lo", "hi", "metodo", "datos_hasta"]
             servido.loc[usar_resp, cols] = por_variante["respaldo"].loc[usar_resp, cols]
             servido.loc[usar_resp, "variante"] = "respaldo"
         servido["y"] = y
@@ -83,24 +96,27 @@ class Monitor:
         ganancia = pd.Series(m.get_booster().get_score(importance_type="total_gain"))
         return list(ganancia.sort_values(ascending=False).index[: self.cm["top_variables"]])
 
-    def _psis(self, X: pd.DataFrame, fechas, top, excluir_anio=None) -> dict:
-        mask = D.mascara_estacional(self.ref.index, fechas, self.cm["margen_estacional_dias"])
+    def _psis(self, X: pd.DataFrame, fechas, top, ref=None, excluir_anio=None) -> dict:
+        ref = self.ref if ref is None else ref
+        mask = D.mascara_estacional(ref.index, fechas, self.cm["margen_estacional_dias"])
         if excluir_anio is not None:  # calibración: la ventana no puede estar en su propia referencia
-            mask &= ~np.isin(self.ref.index.year, excluir_anio)
+            mask &= ~np.isin(ref.index.year, excluir_anio)
         # Los contadores (días desde la última lluvia fuerte, racha sobre el umbral) crecen de 1 en 1: en una
         # ventana de 90 días su distribución SIEMPRE parece desplazada. No tiene sentido el PSI; sí el rango.
-        psis = {v: D.psi(self.ref.loc[mask, v], X[v]) for v in top if not es_contador(v)}
+        psis = {v: D.psi(ref.loc[mask, v], X[v]) for v in top if not es_contador(v)}
         return {k: round(v, 3) for k, v in sorted(psis.items(), key=lambda kv: -np.nan_to_num(kv[1]))}
 
     def _entradas(self, nombre, fecha, variante):
+        info = self._variantes(nombre)[variante][1]
         top = self._top(nombre, variante)
         fechas = self.g.ds.loc[fecha - pd.Timedelta(days=self.cm["ventana_dias"] - 1):fecha].index
         X = self.g.matriz(fechas, top).dropna()
-        psis = self._psis(X, fechas, top)
+        psis = self._psis(X, fechas, top, ref=self.referencia(info))
         psi_max = max((v for v in psis.values() if np.isfinite(v)), default=np.nan)
+        minimo, maximo = self.rango(info)
         return {"psi_max": psi_max, "variable_psi_max": next(iter(psis), None), "psi_top": psis,
                 "psi_umbral": self.umbral_psi(nombre),
-                "fuera_rango": D.fraccion_fuera_de_rango(X, self.minimo, self.maximo)}
+                "fuera_rango": D.fraccion_fuera_de_rango(X, minimo, maximo)}
 
     # ------------------------------------------------------------------ calibración de umbrales PSI
     def calibrar(self, anios=range(2010, 2019)) -> dict:
@@ -136,9 +152,12 @@ class Monitor:
         s = self.serie(zona, h)
         ini = fecha - pd.Timedelta(days=self.cm["ventana_dias"] + h - 1)
         w = s.loc[ini:fecha - pd.Timedelta(days=h)].dropna(subset=["y", "pred", "lo", "hi"])
+        # solo días FUERA de muestra: si el modelo se reentrenó con ellos, su error no dice nada
+        w = w[w.index + pd.Timedelta(days=h) > pd.to_datetime(w["datos_hasta"])]
         if len(w) < 30:
             return {"n": len(w), "rmse": np.nan, "rmse_persistencia": np.nan, "skill": np.nan, "cobertura": np.nan,
-                    "sesgo": np.nan}
+                    "sesgo": np.nan, "nota": "rendimiento aún no evaluable: menos de 30 días fuera de muestra "
+                                             "(p. ej. recién reentrenado)"}
         rmse = float(np.sqrt(np.mean((w["y"] - w["pred"]) ** 2)))
         rmse_p = float(np.sqrt(np.mean(w["y"] ** 2)))  # persistencia: cambio de anomalía = 0
         return {"n": len(w), "rmse": rmse, "rmse_persistencia": rmse_p, "skill": 1 - rmse / rmse_p,
@@ -157,6 +176,7 @@ class Monitor:
                                 {**self.cm, "psi_deriva": ent["psi_umbral"]})
         info = self._variantes(nombre)[variante][1]
         return {"estado": est, "motivos": motivos, "version": info["version_registro"],
+                "datos_hasta": str(self.g.datos_hasta(info).date()),
                 "usa_prevision": bool(info.get("usa_prevision")), "rendimiento": _redondear(ren),
                 "entradas": _redondear(ent)}
 
@@ -195,9 +215,16 @@ class Monitor:
         modelos = {f"sst_{z}_h{h}": self.modelo(z, h, fecha) for z in self.g.zonas for h in self.g.horizontes}
         prev, hip = self.prevision(fecha), self.hipoxia(fecha)
         peor = max([m["estado"] for m in modelos.values()] + [prev["estado"]], key=ORDEN.get)
+        # Enfriamiento: no proponer reentrenar un modelo que ya vio datos muy recientes (acaba de reentrenarse);
+        # su ventana de evaluación ya no sería honesta y se reentrenaría en bucle.
+        espera = pd.Timedelta(days=self.cfg["reentrenamiento"]["dias_minimos_entre_reentrenos"])
+        reentrenar, en_espera = [], []
+        for n, m in modelos.items():
+            if m["estado"] not in self.cm["disparar_con"]:
+                continue
+            (en_espera if fecha - pd.Timestamp(m["datos_hasta"]) < espera else reentrenar).append(n)
         return {"fecha": str(fecha.date()), "estado_global": peor, "modelos": modelos, "prevision": prev,
-                "hipoxia": hip,
-                "reentrenar": [n for n, m in modelos.items() if m["estado"] in self.cm["disparar_con"]]}
+                "hipoxia": hip, "reentrenar": reentrenar, "en_espera_tras_reentreno": en_espera}
 
     def historico(self, fechas) -> pd.DataFrame:
         filas = []

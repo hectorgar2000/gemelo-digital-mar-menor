@@ -69,6 +69,13 @@
 - Escenarios: `Perturbacion.periodo` (`futuro` por defecto en la meteorología). Los árboles se saturan fuera de rango: hay que leer siempre los avisos.
 - Flujo de promoción: `entrenar_sst_prevision.py` → `registrar_modelos.py --modelos sst_prevision` → `exportar_modelos.py`.
 
+## Fase 7 · bloque 2: deriva y reentrenamiento (ver docs/fase7_deriva.md) · v0.8.0
+- `gemelo.monitor`: `metricas.py` (funciones puras) y `deriva.py` (`Monitor`). Umbrales PSI calibrados por modelo (`monitorizar.py --calibrar`); el 0,25 de manual no sirve con anomalías persistentes.
+- Intervalo de la API: `monitor.metricas.cuantiles_conformales` (cascada estacional 3 años → 365 d → validación), compartido con el monitor. Config `intervalo`.
+- Reentrenamiento: `scripts/reentrenar.py` (campeón vs. retador, ventana de 180 d, mejora ≥ 2 %, alias `@anterior`). Ciclo completo: `scripts/ciclo_mantenimiento.py`.
+- **`datos_hasta` por modelo**: usar `Gemelo.datos_hasta(info)` para todo lo que dependa de "qué vio el modelo" (`visto_en_entrenamiento`, residuos del intervalo, rendimiento del monitor, rangos). No usar `fin_entrenamiento_sst` para modelos reentrenados.
+- Tras un reentrenamiento, los tests no pueden asumir que 2024–2026 está fuera de muestra: comprobar contra `datos_hasta`.
+
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.
 - Al entrenar o evaluar a horizonte h, usar `features.filas_de_particion()` (purga de frontera).

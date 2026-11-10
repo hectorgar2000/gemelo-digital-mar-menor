@@ -113,6 +113,7 @@ monitor:
 
 reentrenamiento:
   ventana_evaluacion_dias: 180    # últimos días (con verdad conocida) para comparar campeón y retador
+  dias_minimos_entre_reentrenos: 90  # sin esto, un modelo recién reentrenado se volvería a proponer en bucle
   mejora_minima: 0.02             # el retador solo se promociona si mejora >= 2 % al campeón
 
 # Servidor de Datos Científicos del Mar Menor (UPCT): mapas L2 semanales, 200x200, 10 niveles 0,5-5 m.

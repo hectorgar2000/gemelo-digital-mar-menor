@@ -30,12 +30,22 @@ def test_predict_reconstruye_sst_y_da_intervalo(cliente):
     assert r.status_code == 200
     preds = r.json()["predicciones"]
     assert [p["h"] for p in preds] == [1, 7]
+    modelos = cliente.get("/modelos").json()["sst"]
     for p in preds:
         lo, hi = p["intervalo_90"]
         assert lo < p["sst_prevista"] < hi
-        assert p["metodo_intervalo"] in ("conformal_estacional", "conformal_movil_365d")
-        assert p["sst_real"] is not None and p["visto_en_entrenamiento"] is False
-        assert 0 <= p["prob_superar_umbral"] <= 1
+        assert p["sst_real"] is not None and 0 <= p["prob_superar_umbral"] <= 1
+        # coherencia con lo que vio el modelo (cambia tras cada reentrenamiento)
+        ficha = modelos[p["modelo"]["nombre"]]
+        hasta = ficha["datos_hasta"] if p["modelo"]["variante"] == "con_prevision" or not ficha["respaldo"] else None
+        if hasta is not None:
+            visto = p["fecha_objetivo"] <= hasta
+            assert p["visto_en_entrenamiento"] is visto
+            # si el modelo ya vio ese periodo no hay errores fuera de muestra recientes: cuantiles de validación
+            if visto:
+                assert p["metodo_intervalo"] in ("cuantiles_validacion", "conformal_estacional", "conformal_movil_365d")
+            else:
+                assert p["metodo_intervalo"] in ("conformal_estacional", "conformal_movil_365d")
 
 
 def test_predict_elige_modelo_con_o_sin_prevision(cliente):
@@ -97,6 +107,16 @@ def test_estado_series_y_campanas(cliente):
     assert cliente.get("/series", params={"zona": "laguna", "desde": "1990-01-01", "hasta": "2024-01-01"}).status_code == 422
     c = cliente.get("/hipoxia/campanas").json()["datos"]
     assert len(c) > 300 and "pct_fondo_hipoxia" in c[0]
+
+
+def test_monitor(cliente):
+    r = cliente.get("/monitor")
+    if r.status_code == 404:
+        pytest.skip("sin informe del monitor (python scripts/monitorizar.py)")
+    j = r.json()
+    assert j["estado_global"] in ("OK", "AVISO", "DERIVA")
+    assert set(j["modelos"]) == {f"sst_{z}_h{h}" for z in ("laguna", "costa") for h in (1, 3, 7, 30)}
+    assert j["hipoxia"]["estado"] in ("OK", "SIN_DATOS")
 
 
 def test_zona_invalida_la_rechaza_pydantic(cliente):

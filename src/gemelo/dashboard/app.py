@@ -258,15 +258,47 @@ with tab_modelos:
             "Modelo": k, "Zona": v["zona"], "Horizonte (d)": v["h"], "Versión": v["version_registro"],
             "Previsión meteo": "sí" if v["usa_prevision_meteo"] else "no",
             "Respaldo": f"v{v['respaldo']['version_registro']}" if v["respaldo"] else "—",
-            # métricas comparables: ventana honesta ago-2024→sep-2026 si usa previsión; test 2022-26 si no
-            "RMSE (°C)": me.get("rmse_B_real", me.get("test_rmse")),
-            "Mejora": (f"{me['skill_Breal_vs_A']:+.1%} vs sin previsión" if "skill_Breal_vs_A" in me
+            "Datos hasta": v.get("datos_hasta"),
+            # métrica de la evaluación con la que se promocionó cada versión
+            "RMSE (°C)": me.get("rmse_retador", me.get("rmse_B_real", me.get("test_rmse"))),
+            "Mejora": (f"{me['mejora']:+.1%} vs versión anterior (reentreno)" if "mejora" in me
+                       else f"{me['skill_Breal_vs_A']:+.1%} vs sin previsión" if "skill_Breal_vs_A" in me
                        else f"{me.get('test_skill_vs_amortiguada', 0):+.1%} vs pers. amortiguada"),
         })
     st.dataframe(pd.DataFrame(filas).sort_values(["Zona", "Horizonte (d)"]), hide_index=True, width="stretch")
-    st.caption("RMSE del cambio de anomalía. Modelos con previsión: ventana honesta ago-2024 → sep-2026 con las "
-               "previsiones realmente emitidas. Sin previsión: test 2022–2026. El respaldo se usa los días sin "
-               "previsión archivada (antes de feb-2024).")
+    st.caption("RMSE del cambio de anomalía en la evaluación con la que se promocionó cada versión: reentrenos, "
+               "últimos 180 días frente a la versión anterior; con previsión, ventana honesta ago-2024 → sep-2026; "
+               "sin previsión, test 2022–2026. El respaldo se usa los días sin previsión archivada (antes de feb-2024).")
+    st.subheader("Salud de los modelos (monitor de deriva)")
+    try:
+        mon = leer(st.session_state.url, "monitor")
+    except ErrorAPI:
+        mon = None
+    if mon is None:
+        st.info("Aún no hay informe del monitor (`python scripts/monitorizar.py`).")
+    else:
+        icono = {"OK": "🟢", "AVISO": "🟡", "DERIVA": "🔴", "SIN_DATOS": "⚪"}
+        st.markdown(f"Control del **{mon['fecha']}** · estado global {icono.get(mon['estado_global'], '')} "
+                    f"**{mon['estado_global']}**")
+        st.dataframe(pd.DataFrame([{
+            "Modelo": n, "Estado": f"{icono[x['estado']]} {x['estado']}", "Versión": f"v{x['version']}",
+            "Datos hasta": x["datos_hasta"],
+            "Skill vs persistencia": (f"{x['rendimiento']['skill']:+.0%}" if x["rendimiento"].get("skill") is not None
+                                      else "aún no evaluable"),
+            "Cobertura 90 %": (f"{x['rendimiento']['cobertura']:.0%}" if x["rendimiento"].get("cobertura") is not None
+                               else "—"),
+            "PSI máx / umbral": f"{x['entradas']['psi_max']:.1f} / {x['entradas']['psi_umbral']:.1f}",
+            "Fuera de rango": f"{x['entradas']['fuera_rango']:.0%}",
+            "Motivos": "; ".join(x["motivos"])} for n, x in mon["modelos"].items()]), hide_index=True, width="stretch")
+        for etiqueta, clave in [("Previsión meteorológica", "prevision"), ("Hipoxia", "hipoxia")]:
+            e = mon[clave]
+            st.caption(f"{icono.get(e['estado'], '')} **{etiqueta}**: {e['estado']} " + " ".join(e.get("motivos", [])))
+        if mon.get("reentrenar"):
+            st.caption(f"Propuestos para reentrenar: {', '.join(mon['reentrenar'])}. En espera tras un reentreno "
+                       f"reciente: {', '.join(mon.get('en_espera_tras_reentreno', [])) or 'ninguno'}.")
+        st.caption("Skill 'aún no evaluable' = modelo reentrenado con los últimos datos: hasta que lleguen datos nuevos "
+                   "no hay días fuera de muestra con los que medirlo honestamente.")
+
     hm = m["hipoxia"]
     st.markdown(f"**Hipoxia:** logística v{hm['version_registro']} · validación por años: recall "
                 f"{hm['metricas_loyo'].get('logistica_recall', 0):.2f}, precisión {hm['metricas_loyo'].get('logistica_precision', 0):.2f}, "

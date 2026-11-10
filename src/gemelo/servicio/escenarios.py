@@ -174,15 +174,12 @@ class MotorEscenarios:
         self.g = gemelo
         self.cfg = cargar_config()
         self.diario = gemelo.diario
-        # Rango visto en entrenamiento (train + validación: lo que vieron los modelos finales)
-        fin = gemelo.fin_entrenamiento_sst
-        entreno = gemelo.ds.loc[:fin]
-        # Las variables de previsión se entrenaron con ERA5: su rango es el de meteo_futura_era5 en entrenamiento
+        # Rango visto en entrenamiento, POR MODELO (hasta su `datos_hasta`: los reentrenados ven más).
+        # Las variables de previsión se entrenaron con ERA5: su rango es el de meteo_futura_era5.
         from gemelo.servicio.motor import DIR_DATOS
         ruta = DIR_DATOS / "meteo_futura_era5.parquet"
-        if ruta.exists():
-            entreno = entreno.join(pd.read_parquet(ruta).loc[:fin])
-        self.rango_sst = entreno.quantile([0.0, 1.0], numeric_only=True)
+        self._entreno = gemelo.ds.join(pd.read_parquet(ruta)) if ruta.exists() else gemelo.ds
+        self._rangos = {}
         hip = gemelo.ds_hip[gemelo.ds_hip["y_hipoxia"].notna()]
         self.rango_hip = hip.quantile([0.0, 1.0], numeric_only=True)
         self.sst_max_observada = {z: float(gemelo.diario[f"sst_{z}"].max()) for z in gemelo.zonas}
@@ -205,6 +202,12 @@ class MotorEscenarios:
         filas = [M.construir(fuente_prevision_perturbada(self.g.prev_diaria, fecha, perts, v), puntos, self.g.ref,
                              pd.DatetimeIndex([fecha])).iloc[0] for v in valores]
         return pd.DataFrame(filas).reset_index(drop=True)
+
+    def rango_modelo(self, info) -> pd.DataFrame:
+        hasta = self.g.datos_hasta(info)
+        if hasta not in self._rangos:
+            self._rangos[hasta] = self._entreno.loc[:hasta].quantile([0.0, 1.0], numeric_only=True)
+        return self._rangos[hasta]
 
     def _fuera_de_rango(self, X: pd.DataFrame, rango: pd.DataFrame, variables) -> list[dict]:
         avisos = []
@@ -261,7 +264,7 @@ class MotorEscenarios:
             cambio = pd.Series(d_shap, index=vars_m).groupby([grupo_variable(c) for c in vars_m]).sum()
             cambio = cambio[cambio.abs() > 1e-4].sort_values(key=np.abs, ascending=False)
 
-            avisos = self._fuera_de_rango(X_esc_h, self.rango_sst, vars_m)
+            avisos = self._fuera_de_rango(X_esc_h, self.rango_modelo(info), vars_m)
             sst_max = self.sst_max_observada[zona]
             if np.quantile(dist_esc, 0.5) > sst_max:
                 avisos.append({"variable": f"sst_prevista_{zona}", "valor_central": round(float(np.median(dist_esc)), 3),

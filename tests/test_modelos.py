@@ -29,6 +29,24 @@ def test_lineas_base():
     assert np.allclose(b["amortiguada"], -0.4 * anom)   # queda el 60 %
 
 
+def test_ventana_y_purga_del_reentrenamiento():
+    from gemelo.modelos import reentrenamiento as R
+    v = R.ventana_evaluacion(pd.Timestamp("2026-09-30"), h=7, dias=180)
+    assert v.fin == pd.Timestamp("2026-09-23")                        # su objetivo es el último dato conocido
+    assert (v.fin - v.ini).days == 179
+    idx = pd.date_range("2026-01-01", "2026-09-30", freq="D")
+    m = R.mascara_entrenamiento(idx, v.ini, h=7)
+    assert (idx[m] + pd.Timedelta(days=7) < v.ini).all()               # ningún objetivo de entrenamiento en la ventana
+    assert (idx[~m] + pd.Timedelta(days=7) >= v.ini).all()
+
+
+def test_regla_de_promocion():
+    from gemelo.modelos.reentrenamiento import decidir
+    assert decidir(1.0, 0.97, 0.02) == (True, pytest.approx(0.03))
+    assert decidir(1.0, 0.99, 0.02)[0] is False
+    assert decidir(1.0, 1.10, 0.02)[0] is False                         # empeorar nunca promociona
+
+
 def test_episodios_y_anticipacion():
     idx = pd.date_range("2021-01-01", periods=10, freq="7D")
     y = pd.Series([0, 1, 1, 0, 0, 1, 0, 1, 1, 1], index=idx)

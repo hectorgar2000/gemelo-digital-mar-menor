@@ -30,7 +30,7 @@ app = FastAPI(
     title="Gemelo digital del Mar Menor",
     description="Predicción de temperatura del mar y olas de calor marinas (laguna y costa) y riesgo de "
                 "hipoxia, con intervalos de incertidumbre y explicaciones SHAP.",
-    version="0.7.0",
+    version="0.8.0",
     lifespan=ciclo_de_vida,
 )
 
@@ -117,11 +117,22 @@ def modelos():
         "exportado": m["creado"], "git_commit": m["git_commit"],
         "sst": {k: {"zona": v["zona"], "h": v["h"], "version_registro": v["version_registro"],
                     "usa_prevision_meteo": v.get("usa_prevision", False), "metricas": v["metricas"],
+                    "datos_hasta": v.get("datos_hasta"),
                     "respaldo": ({"version_registro": v["respaldo"]["version_registro"],
                                   "metricas": v["respaldo"]["metricas"]} if v.get("respaldo") else None)}
                 for k, v in m["sst"].items()},
         "hipoxia": {k: m["hipoxia"][k] for k in ("version_registro", "umbral_alerta", "metricas_loyo")},
     }
+
+
+@app.get("/monitor", summary="Último informe del monitor de deriva (estado de cada modelo)")
+def monitor():
+    from gemelo.servicio.motor import DIR_DATOS
+    ruta = DIR_DATOS / "monitor.json"
+    if not ruta.exists():
+        raise HTTPException(404, "Aún no hay informe del monitor: python scripts/monitorizar.py")
+    import json
+    return json.loads(ruta.read_text(encoding="utf-8"))
 
 
 def _tabla(df) -> list[dict]:
