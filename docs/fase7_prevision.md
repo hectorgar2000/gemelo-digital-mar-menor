@@ -103,7 +103,13 @@ El agua y la clorofila solo admiten `pasado`.
 - Los periodos y la validación.
 - Que la previsión perturbada solo cambia los próximos días.
 
-**Docker:** no se ha verificado en esta sesión porque Docker Desktop no estaba arrancado. El Dockerfile no cambia; las tablas nuevas van en `data/processed`, que ya se monta como volumen.
+**Docker (verificado el 2026-11-10, imágenes 0.7.0):**
+- `docker compose up --build` funciona y los dos servicios quedan `healthy`.
+- La API del contenedor elige bien el modelo por fecha (v2 con previsión en 2025–2026, v1 en 2023, v1 a 30 días).
+- Da **los mismos valores que el motor local** (p. ej. laguna a 7 días el 15-05-2025: 20,66 °C) y el escenario "viento ×2 futuro" coincide (−0,919 °C).
+- Rechaza `temp_agua` con periodo `futuro` (422).
+- El dashboard del contenedor muestra "con previsión meteorológica" y la tabla de versiones y respaldos.
+- Los modelos se reexportaron tras el commit de integración: el manifiesto apunta a `a5009eb`, el commit con el código que los sirve.
 
 ## Limitaciones
 - Se evalúa en ~2 años (790 días), con IC por bootstrap de bloques. Es suficiente para estas mejoras, que son grandes, pero no para afinar diferencias pequeñas.
