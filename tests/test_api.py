@@ -33,7 +33,7 @@ def test_predict_reconstruye_sst_y_da_intervalo(cliente):
     for p in preds:
         lo, hi = p["intervalo_90"]
         assert lo < p["sst_prevista"] < hi
-        assert p["metodo_intervalo"].startswith("conformal_ventana")
+        assert p["metodo_intervalo"] in ("conformal_estacional", "conformal_movil_365d")
         assert p["sst_real"] is not None and p["visto_en_entrenamiento"] is False
         assert 0 <= p["prob_superar_umbral"] <= 1
 

@@ -18,6 +18,7 @@ import xgboost as xgb
 
 from gemelo.config import RAIZ, cargar_config
 from gemelo.procesado.features import _doy, grupo_variable
+from gemelo.monitor.metricas import cuantiles_conformales
 from gemelo.procesado.meteo_futura import desde_tabla
 
 
@@ -27,8 +28,6 @@ def es_prevision(variable: str) -> bool:
 
 DIR_MODELOS = RAIZ / "models" / "servicio"
 DIR_DATOS = RAIZ / "data" / "processed"
-VENTANA_CONFORMAL_DIAS = 365   # residuos recientes para el intervalo (se adapta a la deriva)
-MIN_RESIDUOS = 60
 DIAS_SIGUIENTE_CAMPANA = 7     # supuesto por defecto para la hipoxia (mediana real: 7 días)
 
 
@@ -63,8 +62,9 @@ class Gemelo:
         self._explicadores = {}
         # Los modelos finales se entrenaron con train + validación: para esas fechas, una
         # "predicción" del pasado no es honesta (el modelo ya vio la respuesta).
-        part = cargar_config()["particion"]
-        self.fin_entrenamiento_sst = pd.Timestamp(part["validacion"][1])
+        cfg = cargar_config()
+        self.fin_entrenamiento_sst = pd.Timestamp(cfg["particion"]["validacion"][1])
+        self.cfg_intervalo = cfg["intervalo"]
 
     # ------------------------------------------------------------------ utilidades
     @property
@@ -177,22 +177,23 @@ class Gemelo:
 
     # ------------------------------------------------------------------ intervalo
     def residuos_recientes(self, zona, h, fecha) -> tuple[np.ndarray, str]:
-        """Residuos (real - predicho) de los últimos VENTANA días cuyo resultado YA se conocía en `fecha`
-        (t + h <= fecha): conformal causal que se adapta a la deriva. Si no hay suficientes, usa los
-        cuantiles de validación guardados al entrenar. Usa el MISMO modelo y la misma fuente de variables
-        (con previsión real, si es el caso) que la predicción de ese día."""
+        """Residuos (real - predicho) cuyo resultado YA se conocía en `fecha` (t + h <= fecha), elegidos en
+        cascada (misma época de los últimos años -> últimos 365 días -> cuantiles de validación); ver
+        monitor.metricas.cuantiles_conformales, que es la MISMA función que usa el monitor. Mismo modelo y
+        misma fuente de variables (con previsión real, si es el caso) que la predicción de ese día."""
         _, m, info, _ = self.elegir(zona, h, fecha)
-        ini = fecha - pd.Timedelta(days=VENTANA_CONFORMAL_DIAS + h)
-        fin = fecha - pd.Timedelta(days=h)
-        fechas = self.ds.loc[ini:fin].index
+        ci = self.cfg_intervalo
+        ini = fecha - pd.Timedelta(days=365 * ci["anios"] + h)
+        fechas = self.ds.loc[ini:fecha - pd.Timedelta(days=h)].index
         X = self.matriz(fechas, info["variables"])
         y = self.ds.loc[fechas, f"y_delta_{zona}_h{h}"]
         ok = y.notna() & X.notna().all(axis=1)
-        if ok.sum() >= MIN_RESIDUOS:
-            res = y[ok].values - m.predict(X[ok])
-            return res, f"conformal_ventana_{VENTANA_CONFORMAL_DIAS}d"
+        res = pd.Series(y[ok].values - (m.predict(X[ok]) if ok.any() else []), index=fechas[ok])
         q = info["cuantiles_residuo_validacion"]
-        return np.array([q["0.05"], q["0.5"], q["0.95"]]), "cuantiles_validacion"
+        dias = res.index.values.astype("datetime64[D]").astype(np.int64)
+        _, _, metodo, sel = cuantiles_conformales(dias, _doy(res.index), res.values, fecha, h, ci,
+                                                  (q["0.05"], q["0.95"]))
+        return sel, metodo
 
     # ------------------------------------------------------------------ predicción SST
     def predecir(self, zona: str, h: int, fecha=None, X: pd.DataFrame | None = None) -> dict:
