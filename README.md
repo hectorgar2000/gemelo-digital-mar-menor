@@ -66,7 +66,7 @@ Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, 
 | 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker ([detalle](docs/fase4_mlaas.md)) | ✅ |
 | 5 · Escenarios | `/scenario` con incertidumbre ([detalle](docs/fase5_escenarios.md)) | ✅ |
 | 6 · Dashboard | Streamlit de punta a punta ([detalle](docs/fase6_dashboard.md)) | ✅ |
-| 7 · Evolución | Modelos espaciotemporales, tiempo real, 4D | |
+| 7 · Evolución | Previsión meteo como entrada ✅ ([detalle](docs/fase7_prevision.md)) · deriva y reentrenamiento · 3D/4D | ⏳ |
 
 ## Fuentes de datos
 - [Copernicus Marine Service](https://marine.copernicus.eu) — SST, clorofila, física y biogeoquímica del Mediterráneo.

@@ -110,7 +110,8 @@ with tab_estado:
     c2.metric("Ola de calor marina", "EN CURSO" if z["ola_calor_en_curso"] else "No")
     c2.caption(f"{z['dias_sobre_umbral']} días seguidos sobre el umbral (se declara con ≥ 5)")
     c3.metric("Previsión a 7 días", f"{p7['sst_prevista']:.1f} °C")
-    c3.caption(f"Intervalo 90 %: {p7['intervalo_90'][0]:.1f} – {p7['intervalo_90'][1]:.1f} °C")
+    c3.caption(f"Intervalo 90 %: {p7['intervalo_90'][0]:.1f} – {p7['intervalo_90'][1]:.1f} °C · "
+               + ("🌦️ con previsión meteorológica" if p7["usa_prevision_meteo"] else "sin previsión meteorológica"))
     c4.metric("Prob. ola de calor a 7 días", f"{p7['prob_superar_umbral']:.0%}")
     c4.caption(f"Umbral ese día: {p7['umbral_ola_calor']:.1f} °C")
 
@@ -128,6 +129,8 @@ with tab_estado:
     tabla = pd.DataFrame([{"Horizonte": f"{p['h']} d", "Fecha": p["fecha_objetivo"], "SST prevista": p["sst_prevista"],
                            "Intervalo 90 %": f"{p['intervalo_90'][0]:.2f} – {p['intervalo_90'][1]:.2f}",
                            "P(ola de calor)": f"{p['prob_superar_umbral']:.0%}", "Real": p["sst_real"],
+                           "Modelo": f"v{p['modelo']['version_registro']} · "
+                                     + ("con previsión" if p["usa_prevision_meteo"] else "sin previsión"),
                            "Visto en entrenamiento": "sí" if p["visto_en_entrenamiento"] else "no"} for p in preds])
     st.dataframe(tabla, hide_index=True, width="stretch")
     if any(p["visto_en_entrenamiento"] for p in preds):
@@ -162,11 +165,25 @@ with tab_escenarios:
     if activos:
         with st.expander("Incertidumbre y duración de cada cambio", expanded=True):
             for d, etiqueta, lo, hi, paso, neutro in activos:
-                c0, c1, c2 = st.columns([2, 1, 1])
+                c0, c1, c2, c3 = st.columns([2, 1, 1, 1])
                 c0.markdown(f"**{etiqueta}**: {valores[d]:g}")
                 inc = c1.number_input("± incertidumbre", 0.0, abs(hi - lo) / 2, 0.0, paso, key=f"i_{d}")
-                dias = 30 if d == "calentamiento_base" else c2.number_input("últimos días", 1, 365, 30, key=f"d_{d}")
-                perts.append({"driver": d, "valor": valores[d], "incertidumbre": inc, "dias": int(dias)})
+                periodos = drv[d].get("periodos", ["pasado"])
+                periodo = "pasado"
+                if len(periodos) > 1:
+                    periodo = c3.selectbox("cuándo", periodos, index=periodos.index("futuro"), key=f"p_{d}",
+                                           format_func={"pasado": "días pasados", "futuro": "próximos días (previsión)",
+                                                        "ambos": "pasados y próximos"}.get,
+                                           help="'Próximos días' modifica la previsión meteorológica (máx. 7 días) "
+                                                "que usan los modelos de 1, 3 y 7 días.")
+                if d == "calentamiento_base":
+                    dias = 30
+                elif periodo == "futuro":
+                    dias = c2.number_input("próximos días", 1, 7, 7, key=f"df_{d}")
+                else:
+                    dias = c2.number_input("últimos días", 1, 365, 30, key=f"d_{d}")
+                perts.append({"driver": d, "valor": valores[d], "incertidumbre": inc, "dias": int(dias),
+                              "periodo": periodo})
     con_hipoxia = st.checkbox("Simular también el riesgo de hipoxia (última campaña anterior al día base)", True)
     with st.expander("¿Qué no se puede simular?"):
         for k, v in info["no_disponibles"].items():
@@ -234,12 +251,22 @@ with tab_modelos:
     m = llamar("modelos")
     st.markdown(f"Modelos exportados el **{m['exportado'][:10]}** desde el commit `{m['git_commit']}` "
                 "(MLflow Model Registry, alias `@produccion`).")
-    filas = [{"Modelo": k, "Zona": v["zona"], "Horizonte (d)": v["h"], "Versión": v["version_registro"],
-              "RMSE test (°C)": v["metricas_test"].get("test_rmse"),
-              "Mejora vs pers. amortiguada": f"{v['metricas_test'].get('test_skill_vs_amortiguada', 0):+.1%}",
-              "Cobertura intervalo (fija)": f"{v['metricas_test'].get('test_cobertura_90', 0):.0%}"}
-             for k, v in m["sst"].items()]
+    filas = []
+    for k, v in m["sst"].items():
+        me, mr = v["metricas"], (v["respaldo"] or {}).get("metricas", {})
+        filas.append({
+            "Modelo": k, "Zona": v["zona"], "Horizonte (d)": v["h"], "Versión": v["version_registro"],
+            "Previsión meteo": "sí" if v["usa_prevision_meteo"] else "no",
+            "Respaldo": f"v{v['respaldo']['version_registro']}" if v["respaldo"] else "—",
+            # métricas comparables: ventana honesta ago-2024→sep-2026 si usa previsión; test 2022-26 si no
+            "RMSE (°C)": me.get("rmse_B_real", me.get("test_rmse")),
+            "Mejora": (f"{me['skill_Breal_vs_A']:+.1%} vs sin previsión" if "skill_Breal_vs_A" in me
+                       else f"{me.get('test_skill_vs_amortiguada', 0):+.1%} vs pers. amortiguada"),
+        })
     st.dataframe(pd.DataFrame(filas).sort_values(["Zona", "Horizonte (d)"]), hide_index=True, width="stretch")
+    st.caption("RMSE del cambio de anomalía. Modelos con previsión: ventana honesta ago-2024 → sep-2026 con las "
+               "previsiones realmente emitidas. Sin previsión: test 2022–2026. El respaldo se usa los días sin "
+               "previsión archivada (antes de feb-2024).")
     hm = m["hipoxia"]
     st.markdown(f"**Hipoxia:** logística v{hm['version_registro']} · validación por años: recall "
                 f"{hm['metricas_loyo'].get('logistica_recall', 0):.2f}, precisión {hm['metricas_loyo'].get('logistica_precision', 0):.2f}, "

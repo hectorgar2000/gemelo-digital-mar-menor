@@ -11,7 +11,8 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from gemelo.servicio.escenarios import DRIVERS, NO_DISPONIBLES, NOTAS, MotorEscenarios, Perturbacion
+from gemelo.servicio.escenarios import (DRIVERS, METEO_FUTURO, NO_DISPONIBLES, NOTAS, PERIODOS, MotorEscenarios,
+                                        Perturbacion)
 from gemelo.servicio.motor import Gemelo, ErrorGemelo
 
 ESTADO = {}
@@ -29,7 +30,7 @@ app = FastAPI(
     title="Gemelo digital del Mar Menor",
     description="Predicción de temperatura del mar y olas de calor marinas (laguna y costa) y riesgo de "
                 "hipoxia, con intervalos de incertidumbre y explicaciones SHAP.",
-    version="0.6.0",
+    version="0.7.0",
     lifespan=ciclo_de_vida,
 )
 
@@ -74,7 +75,11 @@ class PerturbacionIn(BaseModel):
     driver: Literal[tuple(DRIVERS)] = Field(description="Qué se perturba (ver GET /scenario/drivers)")
     valor: float = Field(description="Suma (°C) o factor (×), según el driver")
     incertidumbre: float = Field(default=0.0, ge=0, description="Desviación típica del valor (Monte Carlo)")
-    dias: int = Field(default=30, ge=1, le=365, description="Últimos días a los que se aplica")
+    dias: int = Field(default=30, ge=1, le=365,
+                      description="Días a los que se aplica: los últimos (pasado) o los próximos (futuro, máx. 7)")
+    periodo: Literal["pasado", "futuro", "ambos"] | None = Field(
+        default=None, description="Vacío = 'futuro' para aire/lluvia/viento/radiación (perturba la previsión) y "
+                                  "'pasado' para el resto. El agua y la clorofila solo admiten 'pasado'.")
 
 
 class HipoxiaEscenario(BaseModel):
@@ -111,7 +116,10 @@ def modelos():
     return {
         "exportado": m["creado"], "git_commit": m["git_commit"],
         "sst": {k: {"zona": v["zona"], "h": v["h"], "version_registro": v["version_registro"],
-                    "metricas_test": v["metricas_test"]} for k, v in m["sst"].items()},
+                    "usa_prevision_meteo": v.get("usa_prevision", False), "metricas": v["metricas"],
+                    "respaldo": ({"version_registro": v["respaldo"]["version_registro"],
+                                  "metricas": v["respaldo"]["metricas"]} if v.get("respaldo") else None)}
+                for k, v in m["sst"].items()},
         "hipoxia": {k: m["hipoxia"][k] for k in ("version_registro", "umbral_alerta", "metricas_loyo")},
     }
 
@@ -156,7 +164,8 @@ def hipoxia(p: PeticionHipoxia):
 @app.get("/scenario/drivers", summary="Qué se puede perturbar en un escenario (y qué no)")
 def drivers():
     return {
-        "drivers": {k: {"tipo": v["tipo"], "unidad": v["unidad"], "descripcion": v["descripcion"], "nota": NOTAS[k]}
+        "drivers": {k: {"tipo": v["tipo"], "unidad": v["unidad"], "descripcion": v["descripcion"], "nota": NOTAS[k],
+                        "periodos": list(PERIODOS) if k in METEO_FUTURO else ["pasado"]}
                     for k, v in DRIVERS.items()},
         "no_disponibles": NO_DISPONIBLES,
     }
@@ -165,7 +174,10 @@ def drivers():
 @app.post("/scenario", summary="Escenario what-if frente al escenario base, con incertidumbre (Monte Carlo)")
 def scenario(p: PeticionEscenario):
     me: MotorEscenarios = ESTADO["escenarios"]
-    perts = [Perturbacion(x.driver, x.valor, x.incertidumbre, x.dias) for x in p.perturbaciones]
+    try:
+        perts = [Perturbacion(x.driver, x.valor, x.incertidumbre, x.dias, x.periodo) for x in p.perturbaciones]
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
     for x in perts:
         if DRIVERS[x.driver]["tipo"] == "factor" and x.valor < 0:
             raise HTTPException(422, f"El driver '{x.driver}' es un factor (×): el valor no puede ser negativo.")

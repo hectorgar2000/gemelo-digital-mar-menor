@@ -64,7 +64,10 @@
 ## Fase 7 · bloque 1: previsión meteorológica (ver docs/fase7_prevision.md)
 - Previsiones reales archivadas (Open-Meteo Previous Runs, antelación 1–7 d) completas desde 2024-02. Config: `prevision` en `config/zona.yaml`.
 - `gemelo.procesado.meteo_futura`: variables `prev{w}_*` (w = 1/3/7) desde ERA5 (entrenamiento, "previsión perfecta") o desde la previsión real con sesgo corregido (feb–jul 2024). Miran al futuro A PROPÓSITO: van en tablas aparte (`meteo_futura_*.parquet`), nunca en `dataset_sst`.
-- Resultado: −17/−26 % de error a 7 días y F1 de olas de calor de 0,59 a 0,76 (h=1–7); sin efecto a 30 días. **Todavía no integrado en el servicio.**
+- Resultado: −17/−26 % de error a 7 días y F1 de olas de calor de 0,59 a 0,76 (h=1–7); sin efecto a 30 días.
+- **Integrado (v0.7.0):** `sst_*_h{1,3,7}` v2 `@produccion` con previsión y v1 `@sin_prevision` como respaldo (h30 sigue en v1). Usar siempre `Gemelo.elegir(zona, h, fecha)` y `Gemelo.matriz(fechas, variables)`; nunca `ds` directamente para las variables de un modelo.
+- Escenarios: `Perturbacion.periodo` (`futuro` por defecto en la meteorología). Los árboles se saturan fuera de rango: hay que leer siempre los avisos.
+- Flujo de promoción: `entrenar_sst_prevision.py` → `registrar_modelos.py --modelos sst_prevision` → `exportar_modelos.py`.
 
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.

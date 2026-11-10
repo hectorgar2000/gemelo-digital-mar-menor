@@ -101,3 +101,36 @@ def fuente_era5(diario: pd.DataFrame):
 
 def fuente_prevision(prev_por_punto: dict[str, dict[int, pd.DataFrame]]):
     return lambda var, p, k: prev_por_punto[p][k][var]
+
+
+# ------------------------------------------------------------------ preparación (pipeline y servicio)
+def preparar(cfg: dict, diario: pd.DataFrame, ref: pd.DataFrame, indice: pd.DatetimeIndex):
+    """Tablas de variables futuras desde ERA5 y desde la previsión real corregida.
+    Devuelve (f_era5, f_prev, prev_corregida, sesgos); las tres últimas son None si no hay previsiones."""
+    from gemelo.config import DATA_RAW
+    puntos, p = list(cfg["meteo"]["puntos"]), cfg["prevision"]
+    f_era5 = construir(fuente_era5(diario), puntos, ref, indice)
+    prev, sesgos = {}, {}
+    for pt in puntos:
+        ruta = DATA_RAW / "meteo" / f"prevision_{pt}.parquet"
+        if not ruta.exists():
+            return f_era5, None, None, None
+        bruto = prevision_por_antelacion(pd.read_parquet(ruta), p["dias_max"])
+        sesgos[pt] = sesgo_prevision(bruto, diario, pt, *p["calibracion"])
+        prev[pt] = corregir(bruto, sesgos[pt])
+    f_prev = construir(fuente_prevision(prev), puntos, ref, indice)
+    return f_era5, f_prev, prev, sesgos
+
+
+def a_tabla(prev: dict[str, dict[int, pd.DataFrame]]) -> pd.DataFrame:
+    """{punto: {antelación: diario}} -> tabla larga (para guardar en Parquet)."""
+    partes = [d.assign(punto=pt, antelacion=k).rename_axis("fecha").reset_index()
+              for pt, por_k in prev.items() for k, d in por_k.items()]
+    return pd.concat(partes, ignore_index=True)
+
+
+def desde_tabla(tabla: pd.DataFrame) -> dict[str, dict[int, pd.DataFrame]]:
+    out = {}
+    for (pt, k), g in tabla.groupby(["punto", "antelacion"]):
+        out.setdefault(pt, {})[int(k)] = g.drop(columns=["punto", "antelacion"]).set_index("fecha").sort_index()
+    return out

@@ -55,6 +55,56 @@ Se corrige antes de usar la previsión.
 5. **A 30 días no aporta nada** (todos los IC contienen el 0). Conocer la primera semana no basta para predecir el mes: el modelo a 30 días se queda como está.
 6. **SHAP:** la meteorología prevista pasa a explicar el 24–38 % de la predicción de 1 a 7 días, frente al ~10 % a 30 días.
 
+## Integración en el servicio (v0.7.0)
+
+**Registro (MLflow):**
+- `sst_{zona}_h{1,3,7}` pasan a **v2 con previsión** (`@produccion`). La v1 queda como `@sin_prevision`.
+- Regla de promoción escrita en `registrar_modelos.py`: mejora ≥ 2 % con previsión real. Los modelos a 30 días no la cumplen y siguen en v1.
+
+**Servicio:**
+- `Gemelo.elegir()` decide cada día qué modelo usar: v2 si hay previsión archivada completa, y si no, el respaldo v1 (por ejemplo, antes de febrero de 2024).
+- Las respuestas incluyen `usa_prevision_meteo` y `modelo.variante`.
+- El intervalo conformal y SHAP usan el mismo modelo y la misma fuente de variables que la predicción.
+- El pipeline genera `meteo_futura_prevision.parquet` y `prevision_diaria.parquet`. La previsión se descarga hasta `fin + 7 días`, para que el último día también tenga la de su semana siguiente (emitida ese día o antes).
+
+**Escenarios:** cada perturbación meteorológica admite `periodo`:
+- `futuro` (por defecto): perturba la **previsión** de los próximos días, como máximo 7.
+- `pasado`: perturba los últimos días observados.
+- `ambos`: las dos cosas.
+
+El agua y la clorofila solo admiten `pasado`.
+
+| Escenario (laguna, 15-05-2025, día normal) | Cambio de SST a 1 / 3 / 7 / 30 d | P(ola de calor) a 7 d |
+|---|---|---|
+| Viento ×2 los próximos 7 d | −0,10 / −0,75 / −0,92 / 0 °C | 43 % → **7 %** |
+| Viento ×0,5 los próximos 7 d | +0,09 / +0,14 / +0,41 / 0 °C | 43 % → **67 %** |
+| Aire +3 °C los próximos 7 d | +0,06 / +0,18 / +0,09 / 0 °C | 43 % → 50 % |
+| Aire +3 °C los últimos 7 d (pasado) | +0,06 / +0,04 / 0 / 0 °C | sin cambio |
+| Radiación ×1,2 los próximos 7 d | 0 | sin cambio |
+
+**Lectura:**
+- El modelo ha aprendido que **el viento domina la evolución a corto plazo**: mezcla la columna de agua y la enfría por evaporación. Por eso los escenarios de temporal o de calma son los que más mueven la predicción.
+- La temperatura del aire prevista tiene un efecto moderado, menor del que cabría esperar físicamente en una laguna somera. Es una relación aprendida de datos, no de física.
+
+**Saturación fuera de rango (lección de XAI):**
+- El 01-07-2025 la laguna estaba en un récord: anomalía de +5,0 °C y 47 días de ola de calor, frente a un máximo en entrenamiento de +4,0 °C y 33 días. El aire previsto (+3,6 °C) ya estaba en el borde de lo visto (+3,5).
+- Un escenario de aire +3 o +6 °C daba **exactamente el mismo resultado**: los árboles no extrapolan y más allá del último valor visto la respuesta es plana. En cambio, aire −3 °C sí cambiaba la predicción.
+- El aviso fuera de rango señala justo esa variable. En un clima que se calienta, esta saturación es la limitación estructural más importante de los modelos de árboles.
+
+**Dashboard:**
+- Indica en cada predicción si usa previsión y con qué versión de modelo.
+- En los escenarios, cada control meteorológico tiene un selector "cuándo" (próximos días o días pasados).
+- La pestaña de modelos muestra la versión, el respaldo y las métricas comparables.
+
+**Tests:** 60 en total. Los nuevos comprueban:
+- La elección v2/v1 según la fecha.
+- Que el viento previsto mueve los modelos con previsión y no el de 30 días.
+- El respaldo con aviso.
+- Los periodos y la validación.
+- Que la previsión perturbada solo cambia los próximos días.
+
+**Docker:** no se ha verificado en esta sesión porque Docker Desktop no estaba arrancado. El Dockerfile no cambia; las tablas nuevas van en `data/processed`, que ya se monta como volumen.
+
 ## Limitaciones
 - Se evalúa en ~2 años (790 días), con IC por bootstrap de bloques. Es suficiente para estas mejoras, que son grandes, pero no para afinar diferencias pequeñas.
 - El modelo aprendió con previsión **perfecta** y se usa con previsión **real**. Funciona porque a 1–7 días el error de previsión es pequeño, pero los intervalos del 90 % deben recalibrarse con errores de la previsión real (el conformal móvil de la API ya lo hace).

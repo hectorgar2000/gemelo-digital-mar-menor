@@ -33,7 +33,10 @@ def descargar_previsiones(sobrescribir: bool = False):
             continue
         celda = punto.get("celda", punto)
         partes = []
-        for ini, fin in _tramos(p["inicio"], cfg["periodo"]["fin"]):
+        # Hasta fin + dias_max: el último día base necesita la previsión de sus 7 días siguientes
+        # (emitida ese mismo día o antes, así que no es información del futuro).
+        fin_prev = pd.Timestamp(cfg["periodo"]["fin"]) + pd.Timedelta(days=p["dias_max"])
+        for ini, fin in _tramos(p["inicio"], fin_prev):
             params = (f"latitude={celda['lat']}&longitude={celda['lon']}&start_date={ini.date()}&end_date={fin.date()}"
                       f"&hourly={','.join(variables)}&timezone=UTC")
             datos = _pedir(f"{p['url']}?{params}")

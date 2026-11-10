@@ -38,6 +38,18 @@ def test_predict_reconstruye_sst_y_da_intervalo(cliente):
         assert 0 <= p["prob_superar_umbral"] <= 1
 
 
+def test_predict_elige_modelo_con_o_sin_prevision(cliente):
+    """Con previsión archivada (2024-02+) usa v2 para h=1/3/7; antes de 2024, el respaldo v1. h=30 siempre v1."""
+    con = cliente.post("/predict", json={"zona": "costa", "horizontes": [7, 30], "fecha": "2025-03-01"}).json()["predicciones"]
+    sin = cliente.post("/predict", json={"zona": "costa", "horizontes": [7], "fecha": "2023-03-01"}).json()["predicciones"]
+    assert con[0]["usa_prevision_meteo"] and con[0]["modelo"]["variante"] == "con_prevision"
+    assert not con[1]["usa_prevision_meteo"]
+    assert not sin[0]["usa_prevision_meteo"] and sin[0]["modelo"]["variante"] == "sin_prevision"
+    m = cliente.get("/modelos").json()["sst"]
+    assert m["sst_costa_h7"]["usa_prevision_meteo"] and m["sst_costa_h7"]["respaldo"] is not None
+    assert m["sst_costa_h30"]["respaldo"] is None
+
+
 def test_predict_sin_fecha_usa_el_ultimo_dia(cliente):
     ultima = cliente.get("/salud").json()["ultima_fecha"]
     p = cliente.post("/predict", json={"zona": "costa", "horizontes": [3]}).json()["predicciones"][0]

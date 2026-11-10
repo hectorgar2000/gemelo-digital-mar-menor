@@ -25,6 +25,7 @@ import pandas as pd
 from scipy.stats import norm, qmc
 
 from gemelo.config import cargar_config
+from gemelo.procesado import meteo_futura as M
 from gemelo.procesado.features import _doy, construir_dataset_sst, grupo_variable
 
 DIAS_TRAMO = 400  # historia necesaria para recalcular lags (30), medias (90) y días desde lluvia (365)
@@ -50,18 +51,18 @@ DRIVERS = {
                   "insitu": ["ahora_chl_sup_media", "ahora_chl_fondo_media"],
                   "descripcion": "Clorofila multiplicada por x (satélite durante `dias` y última campaña in situ)."},
 }
-_FORZAMIENTO_PASADO = ("Perturba el forzamiento del PASADO RECIENTE, no una previsión: el agua observada esos "
-                       "días no cambia, así que el efecto suele ser pequeño. Una ola de calor atmosférica FUTURA "
-                       "requeriría un modelo con previsión meteorológica como entrada (mejora de la Fase 7).")
+_FORZAMIENTO = ("Con periodo 'futuro' (por defecto) perturba la PREVISIÓN de los próximos días (máx. 7), que usan "
+                "los modelos de 1, 3 y 7 días (no el de 30 ni la hipoxia). Con 'pasado' perturba los últimos días "
+                "observados: el agua de esos días no cambia, así que el efecto suele ser pequeño.")
 NOTAS = {
     "temp_agua": "Episodio: el modelo ha aprendido que las anomalías tienden a revertir, así que parte del "
                  "calentamiento se disipa con el horizonte.",
     "calentamiento_base": "Método delta: supone que la dinámica del mar no cambia con el clima de fondo. El umbral "
                           "de ola de calor se mantiene en la base estándar 1991-2020.",
-    "temp_aire": _FORZAMIENTO_PASADO, "lluvia": _FORZAMIENTO_PASADO,
-    "viento": _FORZAMIENTO_PASADO + " En la hipoxia no tiene efecto: el modelo v2 no usa el viento porque en v1 la "
+    "temp_aire": _FORZAMIENTO, "lluvia": _FORZAMIENTO,
+    "viento": _FORZAMIENTO + " En la hipoxia no tiene efecto: el modelo v2 no usa el viento porque en v1 la "
               "relación aprendida tenía el signo contrario a la física (más viento -> más riesgo).",
-    "radiacion": _FORZAMIENTO_PASADO,
+    "radiacion": _FORZAMIENTO,
     "clorofila": "En la SST apenas influye (<3 % de la importancia SHAP). En la hipoxia actúa mediante la clorofila "
                  "in situ de la última campaña.",
 }
@@ -73,12 +74,36 @@ NO_DISPONIBLES = {
 }
 
 
+# Drivers meteorológicos que también pueden perturbar la PREVISIÓN (días futuros) y sobre qué variables
+# diarias de la previsión actúan (ver procesado.meteo_futura).
+METEO_FUTURO = {"temp_aire": ["t2m", "t2max"], "lluvia": ["prec"],
+                "viento": ["viento", "vientomax", "viento_u", "viento_v"], "radiacion": ["rad"]}
+PERIODOS = ("pasado", "futuro", "ambos")
+
+
 @dataclass
 class Perturbacion:
     driver: str
     valor: float
     incertidumbre: float = 0.0
     dias: int = 30
+    periodo: str | None = None   # None -> 'futuro' para la meteorología, 'pasado' para el resto
+
+    def __post_init__(self):
+        if self.periodo is None:
+            self.periodo = "futuro" if self.driver in METEO_FUTURO else "pasado"
+        if self.periodo not in PERIODOS:
+            raise ValueError(f"periodo debe ser uno de {PERIODOS}")
+        if self.periodo != "pasado" and self.driver not in METEO_FUTURO:
+            raise ValueError(f"'{self.driver}' solo admite periodo 'pasado': no hay previsión de esa variable.")
+
+    @property
+    def en_pasado(self):
+        return self.periodo in ("pasado", "ambos")
+
+    @property
+    def en_futuro(self):
+        return self.periodo in ("futuro", "ambos")
 
 
 def columnas_driver(driver: str, columnas) -> list[str]:
@@ -103,8 +128,11 @@ def muestrear(perts: list[Perturbacion], n: int, semilla: int) -> np.ndarray:
 
 
 def perturbar_series(tramo: pd.DataFrame, fecha: pd.Timestamp, perts, valores) -> pd.DataFrame:
+    """Perturba las series OBSERVADAS (pasado reciente) de las perturbaciones con periodo pasado/ambos."""
     t = tramo.copy()
     for p, v in zip(perts, valores):
+        if not p.en_pasado:
+            continue
         d = DRIVERS[p.driver]
         cols = columnas_driver(p.driver, t.columns)
         if not cols:
@@ -119,6 +147,24 @@ def perturbar_series(tramo: pd.DataFrame, fecha: pd.Timestamp, perts, valores) -
     return t
 
 
+def fuente_prevision_perturbada(prev, fecha: pd.Timestamp, perts, valores):
+    """Fuente para meteo_futura.construir con la PREVISIÓN de (fecha, fecha + dias] perturbada."""
+    base = M.fuente_prevision(prev)
+    cambios = [(p, v) for p, v in zip(perts, valores) if p.en_futuro]
+
+    def valor_dia(var, punto, k):
+        s = base(var, punto, k)
+        aplicables = [(p, v) for p, v in cambios if var in METEO_FUTURO[p.driver]]
+        if not aplicables:
+            return s
+        s = s.copy()
+        for p, v in aplicables:
+            ventana = (s.index > fecha) & (s.index <= fecha + pd.Timedelta(days=min(p.dias, 7)))
+            s[ventana] = s[ventana] + v if DRIVERS[p.driver]["tipo"] == "suma" else s[ventana] * v
+        return s
+    return valor_dia
+
+
 def desplazamiento_base(perts, valores) -> float:
     return float(sum(v for p, v in zip(perts, valores) if p.driver == "calentamiento_base"))
 
@@ -131,6 +177,11 @@ class MotorEscenarios:
         # Rango visto en entrenamiento (train + validación: lo que vieron los modelos finales)
         fin = gemelo.fin_entrenamiento_sst
         entreno = gemelo.ds.loc[:fin]
+        # Las variables de previsión se entrenaron con ERA5: su rango es el de meteo_futura_era5 en entrenamiento
+        from gemelo.servicio.motor import DIR_DATOS
+        ruta = DIR_DATOS / "meteo_futura_era5.parquet"
+        if ruta.exists():
+            entreno = entreno.join(pd.read_parquet(ruta).loc[:fin])
         self.rango_sst = entreno.quantile([0.0, 1.0], numeric_only=True)
         hip = gemelo.ds_hip[gemelo.ds_hip["y_hipoxia"].notna()]
         self.rango_hip = hip.quantile([0.0, 1.0], numeric_only=True)
@@ -144,6 +195,15 @@ class MotorEscenarios:
         for v in valores:
             t = perturbar_series(tramo, fecha, perts, v)
             filas.append(construir_dataset_sst(t, self.cfg, self.g.ref).loc[fecha])
+        return pd.DataFrame(filas).reset_index(drop=True)
+
+    def variables_prevision(self, fecha, perts, valores) -> pd.DataFrame | None:
+        """Variables prev{w}_* (una fila por muestra) desde la previsión real del día, perturbada."""
+        if self.g.prev_diaria is None:
+            return None
+        puntos = list(self.cfg["meteo"]["puntos"])
+        filas = [M.construir(fuente_prevision_perturbada(self.g.prev_diaria, fecha, perts, v), puntos, self.g.ref,
+                             pd.DatetimeIndex([fecha])).iloc[0] for v in valores]
         return pd.DataFrame(filas).reset_index(drop=True)
 
     def _fuera_de_rango(self, X: pd.DataFrame, rango: pd.DataFrame, variables) -> list[dict]:
@@ -165,11 +225,21 @@ class MotorEscenarios:
         X_esc = self.variables_escenario(fecha, perts, valores)
         X_cen = self.variables_escenario(fecha, perts, central)
         X_base = self.variables_escenario(fecha, [], np.zeros((1, 0)))
+        # previsión meteorológica (solo la usan los modelos con previsión y si hay previsión ese día)
+        P = {"esc": self.variables_prevision(fecha, perts, valores),
+             "cen": self.variables_prevision(fecha, perts, central),
+             "base": self.variables_prevision(fecha, [], np.zeros((1, 0)))}
         base_shift = np.array([desplazamiento_base(perts, v) for v in valores])
-        resultados = []
+        resultados, alguno_con_prevision = [], False
         for h in horizontes:
-            nombre, m, info = self.g._modelo(zona, h)
+            clave, m, info, usa_prev = self.g.elegir(zona, h, fecha)
+            alguno_con_prevision |= usa_prev
             vars_m = info["variables"]
+            if usa_prev:  # añadir las columnas de previsión a cada tabla de variables
+                X_esc_h, X_cen_h, X_base_h = (pd.concat([X, P[k]], axis=1) for X, k in
+                                              ((X_esc, "esc"), (X_cen, "cen"), (X_base, "base")))
+            else:
+                X_esc_h, X_cen_h, X_base_h = X_esc, X_cen, X_base
             res, metodo = self.g.residuos_recientes(zona, h, fecha)
             fecha_obj = fecha + pd.Timedelta(days=h)
             doy = int(_doy(pd.DatetimeIndex([fecha_obj]))[0])
@@ -179,25 +249,25 @@ class MotorEscenarios:
             def sst(X, shift):
                 return clim + X[f"anom_{zona}_lag0"].values + m.predict(X[vars_m]) + shift
 
-            sst_base = float(sst(X_base, 0.0)[0])
-            sst_esc = sst(X_esc, base_shift)                          # una por muestra de perturbación
+            sst_base = float(sst(X_base_h, 0.0)[0])
+            sst_esc = sst(X_esc_h, base_shift)                        # una por muestra de perturbación
             dist_base = sst_base + res                                # incertidumbre del modelo
             dist_esc = (sst_esc[:, None] + res[None, :]).ravel()      # perturbación × modelo
             dif = sst_esc - sst_base                                  # emparejada: sin error del modelo
 
             # Explicación del cambio: SHAP (escenario central - base), agrupado
-            expl = self.g._explicador(nombre)
-            d_shap = expl(X_cen[vars_m]).values[0] - expl(X_base[vars_m]).values[0]
+            expl = self.g._explicador(clave)
+            d_shap = expl(X_cen_h[vars_m]).values[0] - expl(X_base_h[vars_m]).values[0]
             cambio = pd.Series(d_shap, index=vars_m).groupby([grupo_variable(c) for c in vars_m]).sum()
             cambio = cambio[cambio.abs() > 1e-4].sort_values(key=np.abs, ascending=False)
 
-            avisos = self._fuera_de_rango(X_esc, self.rango_sst, vars_m)
+            avisos = self._fuera_de_rango(X_esc_h, self.rango_sst, vars_m)
             sst_max = self.sst_max_observada[zona]
             if np.quantile(dist_esc, 0.5) > sst_max:
                 avisos.append({"variable": f"sst_prevista_{zona}", "valor_central": round(float(np.median(dist_esc)), 3),
                                "rango_entrenamiento": [None, round(sst_max, 3)],
                                "nota": "SST prevista por encima del máximo observado desde 1982."})
-            sst_cen = float(sst(X_cen, desplazamiento_base(perts, [p.valor for p in perts]))[0])
+            sst_cen = float(sst(X_cen_h, desplazamiento_base(perts, [p.valor for p in perts]))[0])
             resultados.append({
                 "h": h, "fecha_objetivo": str(fecha_obj.date()), "umbral_ola_calor": round(umbral, 3),
                 # sst_puntual = predicción del modelo (igual que /predict). Los cuantiles añaden los errores
@@ -207,11 +277,16 @@ class MotorEscenarios:
                 "diferencia_sst": {k: round(float(np.quantile(dif, q)), 3) for k, q in (("p05", .05), ("p50", .5), ("p95", .95))},
                 "cambio_explicado_por_grupo": [{"grupo": g, "contribucion": round(float(v), 4)} for g, v in cambio.items()],
                 "desplazamiento_base_c": round(float(np.median(base_shift)), 3),
-                "fuera_de_rango": avisos, "metodo_intervalo": metodo,
-                "modelo": {"nombre": nombre, "version_registro": info["version_registro"]},
+                "fuera_de_rango": avisos, "metodo_intervalo": metodo, "usa_prevision_meteo": usa_prev,
+                "modelo": {"nombre": clave.split("__")[0], "version_registro": info["version_registro"],
+                           "variante": "con_prevision" if usa_prev else "sin_prevision"},
             })
+        avisos_n = notas(perts)
+        if any(p.en_futuro for p in perts) and not alguno_con_prevision:
+            avisos_n["sin_prevision"] = (f"No hay previsión meteorológica archivada para {fecha.date()}: las "
+                                         "perturbaciones del FUTURO no tienen efecto en este día.")
         return {"zona": zona, "fecha_base": str(fecha.date()), "n_muestras_perturbacion": len(valores),
-                "notas": notas(perts), "horizontes": resultados}
+                "notas": avisos_n, "horizontes": resultados}
 
     # ------------------------------------------------------------------ hipoxia
     def simular_hipoxia(self, fecha_campana, perts, n_muestras=30, semilla=42, dias_hasta_siguiente=7) -> dict:

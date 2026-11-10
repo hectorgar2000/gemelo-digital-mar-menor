@@ -18,9 +18,12 @@ def test_perturbar_solo_dentro_de_la_ventana():
     idx = pd.date_range("2024-01-01", periods=60, freq="D")
     t = pd.DataFrame({"sst_laguna": 20.0, "prec_cuenca": 2.0, "logchl_laguna": 0.0}, index=idx)
     fecha = idx[-1]
-    perts = [E.Perturbacion("temp_agua", 1.5, dias=10), E.Perturbacion("lluvia", 3.0, dias=10),
+    perts = [E.Perturbacion("temp_agua", 1.5, dias=10), E.Perturbacion("lluvia", 3.0, dias=10, periodo="pasado"),
              E.Perturbacion("clorofila", 10.0, dias=10)]
     p = E.perturbar_series(t, fecha, perts, [1.5, 3.0, 10.0])
+    # con periodo 'futuro' (por defecto en la meteorología) las series observadas NO cambian
+    fut = E.perturbar_series(t, fecha, [E.Perturbacion("lluvia", 3.0, dias=10)], [3.0])
+    assert (fut["prec_cuenca"] == 2.0).all()
     dentro = p.index > fecha - pd.Timedelta(days=10)
     assert dentro.sum() == 10
     assert (p.loc[dentro, "sst_laguna"] == 21.5).all() and (p.loc[~dentro, "sst_laguna"] == 20.0).all()
@@ -40,6 +43,26 @@ def test_muestreo_reproducible_y_centrado():
 
 def test_todos_los_drivers_tienen_nota():
     assert set(E.NOTAS) == set(E.DRIVERS)
+
+
+def test_periodo_por_defecto_y_validacion():
+    assert E.Perturbacion("temp_aire", 2.0).periodo == "futuro"
+    assert E.Perturbacion("temp_agua", 1.0).periodo == "pasado"
+    with pytest.raises(ValueError):
+        E.Perturbacion("temp_agua", 1.0, periodo="futuro")   # no hay previsión de la temperatura del agua
+
+
+def test_prevision_perturbada_solo_en_los_proximos_dias():
+    idx = pd.date_range("2025-06-01", periods=20, freq="D")
+    prev = {"cuenca": {k: pd.DataFrame({"t2m": 20.0, "prec": 1.0}, index=idx) for k in range(1, 8)}}
+    fecha = idx[5]
+    f = E.fuente_prevision_perturbada(prev, fecha, [E.Perturbacion("temp_aire", 3.0, dias=4),
+                                                    E.Perturbacion("lluvia", 2.0, dias=7)], [3.0, 2.0])
+    t = f("t2m", "cuenca", 2)
+    dentro = (t.index > fecha) & (t.index <= fecha + pd.Timedelta(days=4))
+    assert (t[dentro] == 23.0).all() and (t[~dentro] == 20.0).all()
+    assert (f("prec", "cuenca", 1)[idx[6]:idx[12]] == 2.0).all()
+    assert (prev["cuenca"][2]["t2m"] == 20.0).all()  # no modifica el original
 
 
 # ------------------------------------------------------------------ integración (con modelos)
@@ -105,6 +128,27 @@ def test_hipoxia_neutra_coincide_con_prediccion(motor):
     h = me.simular_hipoxia("2024-06-10", [E.Perturbacion("lluvia", 1.0)])
     assert h["base"]["prob_hipoxia"] == pytest.approx(g.predecir_hipoxia("2024-06-10")["prob_hipoxia_siguiente"], abs=1e-3)
     assert h["escenario"]["prob_hipoxia"]["p50"] == pytest.approx(h["base"]["prob_hipoxia"], abs=1e-9)
+
+
+@hay_modelos
+def test_viento_previsto_actua_en_modelos_con_prevision(motor):
+    """Con previsión, más viento previsto enfría (mezcla) y menos viento calienta; el modelo a 30 días no la usa."""
+    g, me = motor
+    f = "2025-07-01"
+    mas = me.simular_sst("laguna", [7, 30], f, [E.Perturbacion("viento", 2.0)])["horizontes"]
+    menos = me.simular_sst("laguna", [7], f, [E.Perturbacion("viento", 0.5)])["horizontes"]
+    assert mas[0]["usa_prevision_meteo"] and mas[0]["diferencia_sst"]["p50"] < -0.3
+    assert menos[0]["diferencia_sst"]["p50"] > 0
+    assert not mas[1]["usa_prevision_meteo"] and mas[1]["diferencia_sst"]["p50"] == pytest.approx(0.0, abs=1e-9)
+
+
+@hay_modelos
+def test_sin_prevision_archivada_usa_respaldo_y_avisa(motor):
+    g, me = motor
+    r = me.simular_sst("laguna", [7], "2023-07-01", [E.Perturbacion("viento", 2.0)])
+    assert r["horizontes"][0]["modelo"]["variante"] == "sin_prevision"
+    assert r["horizontes"][0]["diferencia_sst"]["p50"] == pytest.approx(0.0, abs=1e-9)
+    assert "sin_prevision" in r["notas"]
 
 
 @hay_modelos

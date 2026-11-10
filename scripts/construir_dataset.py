@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from gemelo.config import DATA_RAW, RAIZ, RUTA_CONFIG, cargar_config
 from gemelo.procesado.features import (construir_dataset_hipoxia, construir_dataset_sst,
                                        grupo_variable, referencias_sst)
+from gemelo.procesado import meteo_futura
 from gemelo.procesado.insitu import campanas_insitu
 from gemelo.procesado.series import construir_diario
 
@@ -94,7 +95,21 @@ if __name__ == "__main__":
     paso(f"    {hip.shape} · eventos (y_hipoxia=1): {int(hip.y_hipoxia.sum())} · "
          f"por año: {hip.groupby('anio').y_hipoxia.sum().astype(int).to_dict()}")
 
-    paso("5/5 manifiesto")
+    paso("5/6 meteorología futura (ERA5 y previsión real corregida)")
+    f_era5, f_prev, prev, sesgos = meteo_futura.preparar(cfg, diario, ref, sst.index)
+    f_era5.to_parquet(PROCESSED / "meteo_futura_era5.parquet")
+    if f_prev is None:
+        paso("    sin previsiones descargadas (scripts/descargar_previsiones.py): solo ERA5")
+    else:
+        f_prev.to_parquet(PROCESSED / "meteo_futura_prevision.parquet")
+        meteo_futura.a_tabla(prev).to_parquet(PROCESSED / "prevision_diaria.parquet")  # para escenarios
+        (PROCESSED / "sesgos_prevision.json").write_text(
+            json.dumps({pt: s.round(4).to_dict() for pt, s in sesgos.items()}, indent=1), encoding="utf-8")
+        completos = f_prev[[c for c in f_prev.columns if c.startswith("prev7_")]].notna().all(axis=1)
+        paso(f"    previsión real completa (7 d) para {int(completos.sum())} días base "
+             f"({completos[completos].index.min().date()} → {completos[completos].index.max().date()})")
+
+    paso("6/6 manifiesto")
     man = manifiesto(cfg, {"dataset_sst": sst, "dataset_hipoxia": hip})
     (PROCESSED / "manifest.json").write_text(json.dumps(man, indent=2, ensure_ascii=False), encoding="utf-8")
     grupos = {}

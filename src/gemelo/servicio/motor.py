@@ -18,6 +18,12 @@ import xgboost as xgb
 
 from gemelo.config import RAIZ, cargar_config
 from gemelo.procesado.features import _doy, grupo_variable
+from gemelo.procesado.meteo_futura import desde_tabla
+
+
+def es_prevision(variable: str) -> bool:
+    """Variables prev{w}_* de meteorología prevista (Fase 7)."""
+    return variable.startswith("prev") and variable[4:5].isdigit()
 
 DIR_MODELOS = RAIZ / "models" / "servicio"
 DIR_DATOS = RAIZ / "data" / "processed"
@@ -33,16 +39,27 @@ class ErrorGemelo(ValueError):
 class Gemelo:
     def __init__(self, dir_modelos: Path = DIR_MODELOS, dir_datos: Path = DIR_DATOS):
         self.manifiesto = json.loads((dir_modelos / "servicio.json").read_text(encoding="utf-8"))
-        self.modelos = {}
-        for nombre, info in self.manifiesto["sst"].items():
+
+        def cargar(fichero):
             m = xgb.XGBRegressor()
-            m.load_model(dir_modelos / info["fichero"])
-            self.modelos[nombre] = m
+            m.load_model(dir_modelos / fichero)
+            return m
+
+        # Por modelo: el principal (@produccion) y, si usa previsión, su respaldo sin previsión.
+        self.modelos = {n: cargar(i["fichero"]) for n, i in self.manifiesto["sst"].items()}
+        self.respaldos = {n: cargar(i["respaldo"]["fichero"]) for n, i in self.manifiesto["sst"].items()
+                          if i.get("respaldo")}
         self.hipoxia = joblib.load(dir_modelos / self.manifiesto["hipoxia"]["fichero"])
         self.ds = pd.read_parquet(dir_datos / "dataset_sst.parquet")
         self.ds_hip = pd.read_parquet(dir_datos / "dataset_hipoxia.parquet")
         self.ref = pd.read_parquet(dir_datos / "referencias_sst.parquet")
         self.diario = pd.read_parquet(dir_datos / "series_diarias.parquet")  # series de origen (escenarios)
+        # Previsión meteorológica real (Fase 7): variables prev{w}_* por día base y previsión diaria por
+        # antelación (para escenarios). Opcionales: sin ellas, se usan los modelos de respaldo.
+        ruta_prev = dir_datos / "meteo_futura_prevision.parquet"
+        self.f_prev = pd.read_parquet(ruta_prev) if ruta_prev.exists() else None
+        ruta_diaria = dir_datos / "prevision_diaria.parquet"
+        self.prev_diaria = desde_tabla(pd.read_parquet(ruta_diaria)) if ruta_diaria.exists() else None
         self._explicadores = {}
         # Los modelos finales se entrenaron con train + validación: para esas fechas, una
         # "predicción" del pasado no es honesta (el modelo ya vio la respuesta).
@@ -60,9 +77,9 @@ class Gemelo:
 
     @cached_property
     def fechas_validas(self) -> pd.DatetimeIndex:
-        """Días con todas las variables de entrada disponibles (en ambas zonas)."""
-        info = next(iter(self.manifiesto["sst"].values()))
-        return self.ds.index[self.ds[info["variables"]].notna().all(axis=1)]
+        """Días con todas las variables del estado del mar disponibles (sin contar la previsión)."""
+        variables = sorted({v for i in self.manifiesto["sst"].values() for v in i["variables"] if not es_prevision(v)})
+        return self.ds.index[self.ds[variables].notna().all(axis=1)]
 
     def ultima_fecha(self) -> pd.Timestamp:
         return self.fechas_validas.max()
@@ -80,8 +97,32 @@ class Gemelo:
             raise ErrorGemelo(f"No hay modelo para zona={zona}, h={h}. Zonas: {self.zonas}; horizontes: {self.horizontes}.")
         return nombre, self.modelos[nombre], self.manifiesto["sst"][nombre]
 
+    def hay_prevision(self, fecha, ventana: int) -> bool:
+        if self.f_prev is None or fecha not in self.f_prev.index:
+            return False
+        cols = [c for c in self.f_prev.columns if c.startswith(f"prev{ventana}_")]
+        return bool(self.f_prev.loc[fecha, cols].notna().all())
+
+    def elegir(self, zona, h, fecha):
+        """Modelo que se usa ese día: el principal si no necesita previsión o si la hay completa;
+        si no, su respaldo sin previsión. Devuelve (clave, modelo, ficha, usa_prevision)."""
+        nombre, m, info = self._modelo(zona, h)
+        if info.get("usa_prevision") and not self.hay_prevision(fecha, info["ventana_meteo"]):
+            if nombre not in self.respaldos:
+                raise ErrorGemelo(f"No hay previsión meteorológica para {fecha.date()} ni modelo de respaldo.")
+            return f"{nombre}__sin_prevision", self.respaldos[nombre], info["respaldo"], False
+        return nombre, m, info, bool(info.get("usa_prevision"))
+
+    def matriz(self, fechas, variables) -> pd.DataFrame:
+        """Variables de entrada para esas fechas: estado del mar (dataset_sst) + previsión si el modelo la usa."""
+        X = self.ds.loc[fechas, [v for v in variables if not es_prevision(v)]]
+        prev = [v for v in variables if es_prevision(v)]
+        if prev:
+            X = X.join(self.f_prev[prev])
+        return X[variables]
+
     def fila(self, fecha, variables) -> pd.DataFrame:
-        return self.ds.loc[[fecha], variables]
+        return self.matriz([fecha], variables)
 
     # ------------------------------------------------------------------ lectura del estado
     def serie_sst(self, zona: str, desde=None, hasta=None, max_dias: int = 1500) -> pd.DataFrame:
@@ -138,15 +179,17 @@ class Gemelo:
     def residuos_recientes(self, zona, h, fecha) -> tuple[np.ndarray, str]:
         """Residuos (real - predicho) de los últimos VENTANA días cuyo resultado YA se conocía en `fecha`
         (t + h <= fecha): conformal causal que se adapta a la deriva. Si no hay suficientes, usa los
-        cuantiles de validación guardados al entrenar."""
-        nombre, m, info = self._modelo(zona, h)
+        cuantiles de validación guardados al entrenar. Usa el MISMO modelo y la misma fuente de variables
+        (con previsión real, si es el caso) que la predicción de ese día."""
+        _, m, info, _ = self.elegir(zona, h, fecha)
         ini = fecha - pd.Timedelta(days=VENTANA_CONFORMAL_DIAS + h)
         fin = fecha - pd.Timedelta(days=h)
-        tramo = self.ds.loc[ini:fin]
-        y = tramo[f"y_delta_{zona}_h{h}"]
-        ok = y.notna() & tramo[info["variables"]].notna().all(axis=1)
+        fechas = self.ds.loc[ini:fin].index
+        X = self.matriz(fechas, info["variables"])
+        y = self.ds.loc[fechas, f"y_delta_{zona}_h{h}"]
+        ok = y.notna() & X.notna().all(axis=1)
         if ok.sum() >= MIN_RESIDUOS:
-            res = y[ok].values - m.predict(tramo.loc[ok, info["variables"]])
+            res = y[ok].values - m.predict(X[ok])
             return res, f"conformal_ventana_{VENTANA_CONFORMAL_DIAS}d"
         q = info["cuantiles_residuo_validacion"]
         return np.array([q["0.05"], q["0.5"], q["0.95"]]), "cuantiles_validacion"
@@ -156,7 +199,7 @@ class Gemelo:
         """Predicción de SST a h días desde `fecha`. Con X se puede pasar una fila modificada
         (lo usará el motor de escenarios); por defecto, el estado real del gemelo ese día."""
         fecha = self._fecha(fecha)
-        nombre, m, info = self._modelo(zona, h)
+        clave, m, info, usa_prev = self.elegir(zona, h, fecha)
         X = self.fila(fecha, info["variables"]) if X is None else X[info["variables"]]
         delta = float(m.predict(X)[0])
 
@@ -183,26 +226,31 @@ class Gemelo:
             "metodo_intervalo": metodo,
             "sst_real": None if pd.isna(real) else round(float(real), 3),  # solo si ya se conoce (backtesting)
             "visto_en_entrenamiento": bool(fecha_obj <= self.fin_entrenamiento_sst),
-            "modelo": {"nombre": nombre, "version_registro": info["version_registro"]},
+            "usa_prevision_meteo": usa_prev,
+            "modelo": {"nombre": clave.split("__")[0], "version_registro": info["version_registro"],
+                       "variante": "con_prevision" if usa_prev else "sin_prevision"},
         }
 
     # ------------------------------------------------------------------ explicación SST
-    def _explicador(self, nombre):
-        if nombre not in self._explicadores:
-            self._explicadores[nombre] = shap.TreeExplainer(self.modelos[nombre])
-        return self._explicadores[nombre]
+    def _explicador(self, clave):
+        """Explicador SHAP por modelo (clave = nombre o nombre__sin_prevision para el respaldo)."""
+        if clave not in self._explicadores:
+            nombre, _, variante = clave.partition("__")
+            modelo = self.respaldos[nombre] if variante else self.modelos[nombre]
+            self._explicadores[clave] = shap.TreeExplainer(modelo)
+        return self._explicadores[clave]
 
     def explicar(self, zona: str, h: int, fecha=None, top: int = 10, X: pd.DataFrame | None = None) -> dict:
         fecha = self._fecha(fecha)
-        nombre, m, info = self._modelo(zona, h)
+        clave, m, info, usa_prev = self.elegir(zona, h, fecha)
         X = self.fila(fecha, info["variables"]) if X is None else X[info["variables"]]
-        sv = self._explicador(nombre)(X)
+        sv = self._explicador(clave)(X)
         contrib = pd.Series(sv.values[0], index=info["variables"])
         grupos = contrib.groupby([grupo_variable(c) for c in contrib.index]).sum()
         grupos = grupos.reindex(grupos.abs().sort_values(ascending=False).index)
         principales = contrib.reindex(contrib.abs().sort_values(ascending=False).index[:top])
         return {
-            "zona": zona, "h": h, "fecha_base": str(fecha.date()),
+            "zona": zona, "h": h, "fecha_base": str(fecha.date()), "usa_prevision_meteo": usa_prev,
             "que_se_explica": "cambio de anomalía de SST previsto (°C) respecto a hoy",
             "valor_base": round(float(np.ravel(sv.base_values)[0]), 4),
             "prediccion": round(float(m.predict(X)[0]), 4),

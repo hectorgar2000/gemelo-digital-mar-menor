@@ -20,7 +20,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 
-from gemelo.config import DATA_RAW, RAIZ, cargar_config
+from gemelo.config import RAIZ, cargar_config
 from gemelo.modelos import xai
 from gemelo.modelos.comun import MANIFIESTO, configurar_mlflow, rmse
 from gemelo.modelos.sst import entrenar_zona_horizonte, evaluar_mhw
@@ -48,17 +48,9 @@ def skill_bootstrap(err_ref, err_mod, bloque=30, n=2000, semilla=0):
 
 
 def construir_tablas(cfg, ds, diario, ref):
-    puntos = list(cfg["meteo"]["puntos"])
-    f_era5 = M.construir(M.fuente_era5(diario), puntos, ref, ds.index)
-    p = cfg["prevision"]
-    prev, sesgos = {}, {}
-    for pt in puntos:
-        bruto = M.prevision_por_antelacion(pd.read_parquet(DATA_RAW / "meteo" / f"prevision_{pt}.parquet"), p["dias_max"])
-        sesgos[pt] = M.sesgo_prevision(bruto, diario, pt, *p["calibracion"])
-        prev[pt] = M.corregir(bruto, sesgos[pt])
-    f_prev = M.construir(M.fuente_prevision(prev), puntos, ref, ds.index)
-    f_era5.to_parquet(PROCESSED / "meteo_futura_era5.parquet")
-    f_prev.to_parquet(PROCESSED / "meteo_futura_prevision.parquet")
+    f_era5, f_prev, _, sesgos = M.preparar(cfg, diario, ref, ds.index)  # misma función que el pipeline
+    if f_prev is None:
+        raise SystemExit("Faltan las previsiones: python scripts/descargar_previsiones.py")
     return f_era5, f_prev, sesgos
 
 

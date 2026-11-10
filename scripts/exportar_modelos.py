@@ -25,9 +25,30 @@ DESTINO = RAIZ / "models" / "servicio"
 ALIAS = "produccion"
 
 
-def info_version(client, nombre):
-    mv = client.get_model_version_by_alias(nombre, ALIAS)
+def info_version(client, nombre, alias=ALIAS):
+    mv = client.get_model_version_by_alias(nombre, alias)
     return mv, client.get_run(mv.run_id)
+
+
+def exportar_sst(client, nombre, alias, sufijo=""):
+    """Exporta una versión (por alias) de un modelo de SST y devuelve su ficha para el manifiesto."""
+    mv, run = info_version(client, nombre, alias)
+    modelo = mlflow.xgboost.load_model(f"models:/{nombre}@{alias}")
+    fichero = f"{nombre}{sufijo}.json"
+    modelo.save_model(DESTINO / fichero)  # formato nativo JSON de XGBoost: portable
+    with open(client.download_artifacts(run.info.run_id, "cuantiles_residuo_validacion.json"), encoding="utf-8") as f:
+        cuantiles = json.load(f)
+    variables = modelo.get_booster().feature_names
+    usa_prevision = mv.tags.get("usa_prevision") == "true"
+    print(f"  {nombre}@{alias} v{mv.version} -> {fichero}" + (" (con previsión)" if usa_prevision else ""))
+    return {
+        "fichero": fichero, "version_registro": int(mv.version), "run_id": run.info.run_id, "variables": variables,
+        "usa_prevision": usa_prevision,
+        "ventana_meteo": int(mv.tags["ventana_meteo"]) if usa_prevision else None,
+        "cuantiles_residuo_validacion": cuantiles,
+        "metricas": {k: round(v, 4) for k, v in run.data.metrics.items()
+                     if k.startswith(("test_", "rmse_", "skill_", "f1_"))},
+    }
 
 
 if __name__ == "__main__":
@@ -49,20 +70,12 @@ if __name__ == "__main__":
     for zona in ZONAS:
         for h in cfg["horizontes_dias"]:
             nombre = f"sst_{zona}_h{h}"
-            mv, run = info_version(client, nombre)
-            modelo = mlflow.xgboost.load_model(f"models:/{nombre}@{ALIAS}")
-            fichero = f"{nombre}.json"
-            modelo.save_model(DESTINO / fichero)  # formato nativo JSON de XGBoost: portable
-            ruta_q = client.download_artifacts(run.info.run_id, "cuantiles_residuo_validacion.json")
-            with open(ruta_q, encoding="utf-8") as f:
-                cuantiles = json.load(f)
-            manifiesto["sst"][nombre] = {
-                "zona": zona, "h": h, "fichero": fichero, "version_registro": int(mv.version),
-                "run_id": run.info.run_id, "variables": modelo.get_booster().feature_names,
-                "cuantiles_residuo_validacion": cuantiles,
-                "metricas_test": {k: round(v, 4) for k, v in run.data.metrics.items() if k.startswith("test_")},
-            }
-            print(f"  {nombre} v{mv.version} -> {fichero}")
+            ficha = {"zona": zona, "h": h, **exportar_sst(client, nombre, ALIAS)}
+            # Si @produccion usa previsión, se exporta también la versión sin previsión como RESPALDO:
+            # el servicio la usa los días en que no hay previsión archivada (p. ej. antes de 2024).
+            ficha["respaldo"] = (exportar_sst(client, nombre, "sin_prevision", "__sin_prevision")
+                                 if ficha["usa_prevision"] else None)
+            manifiesto["sst"][nombre] = ficha
 
     mv, run = info_version(client, "hipoxia_logistica")
     log = mlflow.sklearn.load_model(f"models:/hipoxia_logistica@{ALIAS}")
