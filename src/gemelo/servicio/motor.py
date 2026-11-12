@@ -13,10 +13,9 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-import shap
-import xgboost as xgb
 
 from gemelo.config import RAIZ, cargar_config
+from gemelo.modelos.conjunto import ModeloSST
 from gemelo.procesado.features import _doy, grupo_variable
 from gemelo.monitor.metricas import cuantiles_conformales
 from gemelo.procesado.cubo import UNIDADES
@@ -41,15 +40,12 @@ class Gemelo:
         self.manifiesto = json.loads((dir_modelos / "servicio.json").read_text(encoding="utf-8"))
         self.dir_datos = dir_datos
 
-        def cargar(fichero):
-            m = xgb.XGBRegressor()
-            m.load_model(dir_modelos / fichero)
-            return m
+        def cargar(ficha):  # árboles + parte lineal opcional (modelos a 30 días de la receta nueva)
+            return ModeloSST.cargar(dir_modelos / ficha["fichero"], ficha.get("lineal"))
 
         # Por modelo: el principal (@produccion) y, si usa previsión, su respaldo sin previsión.
-        self.modelos = {n: cargar(i["fichero"]) for n, i in self.manifiesto["sst"].items()}
-        self.respaldos = {n: cargar(i["respaldo"]["fichero"]) for n, i in self.manifiesto["sst"].items()
-                          if i.get("respaldo")}
+        self.modelos = {n: cargar(i) for n, i in self.manifiesto["sst"].items()}
+        self.respaldos = {n: cargar(i["respaldo"]) for n, i in self.manifiesto["sst"].items() if i.get("respaldo")}
         self.hipoxia = joblib.load(dir_modelos / self.manifiesto["hipoxia"]["fichero"])
         self.ds = pd.read_parquet(dir_datos / "dataset_sst.parquet")
         self.ds_hip = pd.read_parquet(dir_datos / "dataset_hipoxia.parquet")
@@ -61,7 +57,6 @@ class Gemelo:
         self.f_prev = pd.read_parquet(ruta_prev) if ruta_prev.exists() else None
         ruta_diaria = dir_datos / "prevision_diaria.parquet"
         self.prev_diaria = desde_tabla(pd.read_parquet(ruta_diaria)) if ruta_diaria.exists() else None
-        self._explicadores = {}
         # Los modelos finales se entrenaron con train + validación: para esas fechas, una
         # "predicción" del pasado no es honesta (el modelo ya vio la respuesta).
         cfg = cargar_config()
@@ -198,11 +193,29 @@ class Gemelo:
         y = self.ds.loc[fechas, f"y_delta_{zona}_h{h}"]
         ok = y.notna() & X.notna().all(axis=1)
         res = pd.Series(y[ok].values - (m.predict(X[ok]) if ok.any() else []), index=fechas[ok])
+        res = self.con_residuos_guardados(res, info)
         q = info["cuantiles_residuo_validacion"]
         dias = res.index.values.astype("datetime64[D]").astype(np.int64)
         _, _, metodo, sel = cuantiles_conformales(dias, _doy(res.index), res.values, fecha, h, ci,
                                                   (q["0.05"], q["0.95"]))
+        if metodo == "cuantiles_validacion":
+            # último recurso: distribución aproximada interpolando los cuantiles guardados (5 %..95 %), para
+            # que la probabilidad de ola de calor no quede reducida a 0 / 0,5 / 1
+            niveles = sorted(float(k) for k in q)
+            sel = np.interp(np.linspace(niveles[0], niveles[-1], 91), niveles, [q[str(k)] for k in niveles])
         return sel, metodo
+
+    @staticmethod
+    def con_residuos_guardados(res: pd.Series, info: dict) -> pd.Series:
+        """Añade a los errores fuera de muestra "en vivo" los GUARDADOS al promocionar el modelo (los de su
+        evaluación fuera de muestra, con fecha). Un modelo reajustado con todos los datos no tiene errores en
+        vivo hasta que llegan datos nuevos; sin estos, el intervalo caería al respaldo de 5 cuantiles.
+        Si un día está en los dos, manda el error en vivo."""
+        g = info.get("residuos_validacion")
+        if not g:
+            return res
+        guardados = pd.Series(g["residuos"], index=pd.to_datetime(g["fechas"]), dtype=float)
+        return pd.concat([guardados[~guardados.index.isin(res.index)], res]).sort_index()
 
     # ------------------------------------------------------------------ predicción SST
     def predecir(self, zona: str, h: int, fecha=None, X: pd.DataFrame | None = None) -> dict:
@@ -227,7 +240,7 @@ class Gemelo:
             "zona": zona, "h": h, "fecha_base": str(fecha.date()), "fecha_objetivo": str(fecha_obj.date()),
             "sst_hoy": round(float(X[f"sst_{zona}"].iloc[0]), 3),
             "sst_prevista": round(sst_prev, 3),
-            "intervalo_90": [round(sst_prev + lo, 3), round(sst_prev + hi, 3)],
+            "intervalo_90": [round(float(sst_prev + lo), 3), round(float(sst_prev + hi), 3)],
             "anomalia_hoy": round(anom_hoy, 3), "cambio_anomalia_previsto": round(delta, 3),
             "umbral_ola_calor": round(umbral, 3),
             "ola_calor_prevista": bool(sst_prev > umbral),
@@ -238,31 +251,24 @@ class Gemelo:
             "visto_en_entrenamiento": bool(fecha_obj <= self.datos_hasta(info)),
             "usa_prevision_meteo": usa_prev,
             "modelo": {"nombre": clave.split("__")[0], "version_registro": info["version_registro"],
-                       "variante": "con_prevision" if usa_prev else "sin_prevision"},
+                       "variante": "con_prevision" if usa_prev else "sin_prevision",
+                       "receta": info.get("receta", "clasica")},
         }
 
     # ------------------------------------------------------------------ explicación SST
-    def _explicador(self, clave):
-        """Explicador SHAP por modelo (clave = nombre o nombre__sin_prevision para el respaldo)."""
-        if clave not in self._explicadores:
-            nombre, _, variante = clave.partition("__")
-            modelo = self.respaldos[nombre] if variante else self.modelos[nombre]
-            self._explicadores[clave] = shap.TreeExplainer(modelo)
-        return self._explicadores[clave]
-
     def explicar(self, zona: str, h: int, fecha=None, top: int = 10, X: pd.DataFrame | None = None) -> dict:
         fecha = self._fecha(fecha)
         clave, m, info, usa_prev = self.elegir(zona, h, fecha)
         X = self.fila(fecha, info["variables"]) if X is None else X[info["variables"]]
-        sv = self._explicador(clave)(X)
-        contrib = pd.Series(sv.values[0], index=info["variables"])
+        valores, base = m.contribuciones(X)   # SHAP de los árboles (+ parte lineal exacta si la hay)
+        contrib = pd.Series(valores[0], index=info["variables"])
         grupos = contrib.groupby([grupo_variable(c) for c in contrib.index]).sum()
         grupos = grupos.reindex(grupos.abs().sort_values(ascending=False).index)
         principales = contrib.reindex(contrib.abs().sort_values(ascending=False).index[:top])
         return {
             "zona": zona, "h": h, "fecha_base": str(fecha.date()), "usa_prevision_meteo": usa_prev,
             "que_se_explica": "cambio de anomalía de SST previsto (°C) respecto a hoy",
-            "valor_base": round(float(np.ravel(sv.base_values)[0]), 4),
+            "valor_base": round(base, 4),
             "prediccion": round(float(m.predict(X)[0]), 4),
             "grupos": [{"grupo": g, "contribucion": round(float(v), 4)} for g, v in grupos.items()],
             "variables": [{"variable": v, "valor": round(float(X[v].iloc[0]), 4), "grupo": grupo_variable(v),

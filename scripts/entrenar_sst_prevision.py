@@ -48,7 +48,7 @@ def skill_bootstrap(err_ref, err_mod, bloque=30, n=2000, semilla=0):
 
 
 def construir_tablas(cfg, ds, diario, ref):
-    f_era5, f_prev, _, sesgos = M.preparar(cfg, diario, ref, ds.index)  # misma función que el pipeline
+    f_era5, f_prev, _, sesgos = M.preparar(cfg, diario, ref, ds)  # misma función que el pipeline
     if f_prev is None:
         raise SystemExit("Faltan las previsiones: python scripts/descargar_previsiones.py")
     return f_era5, f_prev, sesgos

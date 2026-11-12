@@ -1,6 +1,6 @@
 # Gemelo digital del Mar Menor — Informe final
 
-*2026-11-12 · v0.9.0 · Detalle de cada fase en los documentos enlazados.*
+*2026-11-12 · v0.10.0 · Detalle de cada fase en los documentos enlazados.*
 
 ## 1. Qué es
 Una réplica virtual del **Mar Menor y su costa** alimentada con datos reales. Sus modelos de IA:
@@ -38,6 +38,7 @@ MANTENIMIENTO  ciclo_mantenimiento.py: monitor de deriva ──► reentrenamien
 |---|---|---|
 | ¿Bate el modelo de SST a las líneas base? | Sí, a la persistencia amortiguada en los **8 casos** (laguna +4–10 % frente a la mejor línea base). Antes de añadir la previsión, la costa empataba con la persistencia a 3–7 días. | [Fase 3](fase3_informe.md) |
 | ¿Cuánto aporta la previsión meteorológica? | **−17,5 % (laguna) y −26 % (costa) de error a 7 días** con las previsiones realmente emitidas. F1 de ola de calor a 7 días de 0,59/0,57 a **0,76/0,75**. Nada a 30 días. | [Fase 7 · previsión](fase7_prevision.md) |
+| ¿Se podían mejorar más los modelos? | Sí, sobre todo con física explícita (aire − agua, × viento): **−4 % de error y −10 % en días extremos**, confirmado con previsiones reales. Promocionados 6 de 8 modelos. | [Mejora](mejora_modelos.md) |
 | ¿Se puede anticipar la hipoxia? | En parte: la logística **anticipa 4 de 9 inicios de episodio** (la persistencia, 1), con precisión de 0,48. Con 30 eventos, XGBoost no supera a la persistencia. | [Fase 3](fase3_informe.md) |
 | ¿Cómo de fiable es la incertidumbre? | El intervalo conformal estacional cubre el **87 %** (objetivo: 90 %) y mejora el interval score un 8 %. | [Fase 7 · deriva](fase7_deriva.md) |
 | ¿Qué pasa con +1,5 °C? | Como episodio cálido, se disipa en parte. Como cambio de clima de fondo, la probabilidad de ola de calor a 7 días pasa del **24 % al 81 %**. | [Fase 5](fase5_escenarios.md) |
@@ -45,9 +46,9 @@ MANTENIMIENTO  ciclo_mantenimiento.py: monitor de deriva ──► reentrenamien
 | ¿Qué aporta ver el agua en 3D? | El 10-08-2023 la **mitad del volumen** de la laguna estaba en hipoxia, aunque solo el 23 % del fondo. En la DANA de 2019, el 26 % del volumen estaba anóxico. | [Fase 7 · visor](fase7_visor4d.md) |
 
 **Modelos en servicio:**
-- SST a 1 y 3 días: v3 (con previsión, reentrenados hasta septiembre de 2026).
-- SST a 7 días: costa v3; laguna v2 (su retador mejoró solo un 1,99 %, por debajo del umbral).
-- SST a 30 días: v2 (reentrenados, sin previsión).
+- SST a 1 día: v3 (receta clásica, con previsión, reentrenados hasta septiembre de 2026).
+- SST a 3 y 7 días: receta mejorada con variables físicas y pesos recientes (laguna v4/v3, costa v4/v4).
+- SST a 30 días: v3, modelo combinado (árboles + lineal) con variables físicas.
 - Respaldos sin previsión: v1.
 - Hipoxia: logística v2 (sin viento).
 
@@ -81,6 +82,7 @@ MANTENIMIENTO  ciclo_mantenimiento.py: monitor de deriva ──► reentrenamien
 - **No es un gemelo en tiempo real.** Actualizar al día de hoy exige descargar datos a mano y ampliar `periodo.fin`; los productos NRT de Copernicus no están verificados.
 - **La hipoxia no se puede vigilar ni usar con datos actuales:** no hay campañas in situ desde julio de 2024.
 - La SST de satélite **suaviza la laguna**: 6 celdas, con un sesgo estacional de ±2 °C frente a la medida in situ.
+- **Los árboles se saturan** fuera de rango a 1–7 días (a 30 días la parte lineal sí extrapola).
 - **Los intervalos cubren el 87 %**, algo por debajo del 90 % nominal.
 - **Los reentrenos se deciden con una sola ventana de 180 días:** las mejoras del 2–4 % podrían ser ruido.
 - **Los respaldos sin previsión (v1) no se reentrenan.**

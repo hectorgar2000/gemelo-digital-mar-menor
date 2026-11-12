@@ -24,8 +24,9 @@ import pandas as pd
 from mlflow.tracking import MlflowClient
 
 from gemelo.config import RAIZ, cargar_config
+from gemelo.modelos import receta as RC
 from gemelo.modelos import reentrenamiento as R
-from gemelo.modelos.comun import MANIFIESTO, configurar_mlflow, rmse
+from gemelo.modelos.comun import MANIFIESTO, configurar_mlflow, mejora_bootstrap, rmse
 from gemelo.monitor.deriva import Monitor
 
 PROCESSED = RAIZ / "data" / "processed"
@@ -43,10 +44,10 @@ def campeon(client, nombre):
 
 
 def log_modelo(modelo, ejemplo):
-    try:
-        mlflow.xgboost.log_model(modelo, name="modelo", input_example=ejemplo)
-    except TypeError:
-        mlflow.xgboost.log_model(modelo, artifact_path="modelo", input_example=ejemplo)
+    """Registra los árboles como modelo de MLflow y, si la hay, la parte lineal como artefacto JSON."""
+    mlflow.xgboost.log_model(modelo.arboles, name="modelo", input_example=ejemplo)
+    if modelo.lineal:
+        mlflow.log_dict(modelo.lineal, "lineal.json")
 
 
 if __name__ == "__main__":
@@ -99,32 +100,39 @@ if __name__ == "__main__":
             X_eval, y_eval = X_eval[ok], y.loc[eval_idx][ok]
 
             m_entreno = R.mascara_entrenamiento(ds.index, v.ini, h)
-            retador = R.entrenar(X_entreno[m_entreno], y[m_entreno], params, n_arboles)
+            receta = info.get("receta", "clasica")   # el retador usa la receta de su campeón
+            retador = RC.entrenar(X_entreno[m_entreno], y[m_entreno], params, n_arboles, receta, h)
             p_ret = retador.predict(X_eval)
             p_cam = g.modelos[nombre].predict(X_eval)
             r_cam, r_ret, r_per = rmse(y_eval, p_cam), rmse(y_eval, p_ret), rmse(y_eval, np.zeros(len(y_eval)))
             promover, mejora = R.decidir(r_cam, r_ret, cr["mejora_minima"])
+            # además de mejorar >= mínimo, la mejora debe ser distinguible del ruido (IC90 por bloques > 0)
+            ic05, ic95 = mejora_bootstrap(y_eval.values - p_cam, y_eval.values - p_ret)
+            promover = promover and ic05 > 0
             fila = {"modelo": nombre, "campeon": f"v{mv.version}", "n_eval": len(y_eval),
                     "ventana": f"{v.ini.date()}→{v.fin.date()}", "rmse_persistencia": r_per,
-                    "rmse_campeon": r_cam, "rmse_retador": r_ret, "mejora": mejora,
+                    "rmse_campeon": r_cam, "rmse_retador": r_ret, "mejora": mejora, "ic05": ic05, "ic95": ic95,
                     "decision": "PROMOVER" if promover else "mantener"}
 
             with mlflow.start_run(run_name=nombre, nested=True) as hijo:
                 mlflow.log_params({"zona": zona, "h": h, "campeon_version": mv.version, "n_arboles": n_arboles,
                                    **params, "ventana_evaluacion": fila["ventana"]})
-                mlflow.log_metrics({k: fila[k] for k in ("rmse_persistencia", "rmse_campeon", "rmse_retador", "mejora")})
+                mlflow.log_metrics({k: fila[k] for k in ("rmse_persistencia", "rmse_campeon", "rmse_retador", "mejora", "ic05", "ic95")})
                 if promover and not a.sin_promover:
                     # reajuste con TODOS los datos con verdad conocida (incluida la ventana evaluada)
                     m_todo = R.mascara_entrenamiento(ds.index, ultimo + pd.Timedelta(days=1), h)
-                    final = R.entrenar(X_entreno[m_todo], y[m_todo], params, n_arboles)
+                    final = RC.entrenar(X_entreno[m_todo], y[m_todo], params, n_arboles, receta, h)
                     res = y_eval.values - p_ret  # errores FUERA de muestra del retador -> cuantiles del intervalo
                     mlflow.log_dict({q: float(np.quantile(res, q)) for q in (0.05, 0.10, 0.50, 0.90, 0.95)},
                                     "cuantiles_residuo_validacion.json")
+                    mlflow.log_dict({"fechas": [str(d.date()) for d in y_eval.index], "residuos": [round(float(r), 4) for r in res],
+                                     "origen": f"retador evaluado en {fila['ventana']}"}, "residuos_validacion.json")
                     log_modelo(final, X_eval.head(3))
                     nueva = mlflow.register_model(f"runs:/{hijo.info.run_id}/modelo", nombre)
                     etiquetas = {"datos_hasta": str(ultimo.date()), "reentrenado": time.strftime("%Y-%m-%d"),
                                  "mejora_vs_campeon": round(mejora, 4), "rmse_ventana_retador": round(r_ret, 4),
-                                 "usa_prevision": "true" if info.get("usa_prevision") else "false"}
+                                 "usa_prevision": "true" if info.get("usa_prevision") else "false",
+                                 "receta": receta, "lineal": "true" if final.lineal else "false", "residuos": "true"}
                     if info.get("usa_prevision"):
                         etiquetas["ventana_meteo"] = info["ventana_meteo"]
                     for k, val in etiquetas.items():
@@ -139,7 +147,7 @@ if __name__ == "__main__":
                     promovidos.append(nombre)
             filas.append(fila)
             paso(f"{nombre}: campeón v{mv.version} {r_cam:.3f} · retador {r_ret:.3f} · persistencia {r_per:.3f} "
-                 f"· mejora {mejora:+.1%} -> {fila['decision']}" + (f" ({fila.get('nueva_version')})" if promover else ""))
+                 f"· mejora {mejora:+.1%} [IC90 {ic05:+.1%}, {ic95:+.1%}] -> {fila['decision']}" + (f" ({fila.get('nueva_version')})" if promover else ""))
 
         tabla = pd.DataFrame(filas)
         salida = RAIZ / "docs" / "figuras" / "fase7" / "reentrenamiento.csv"

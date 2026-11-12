@@ -239,7 +239,8 @@ class MotorEscenarios:
             alguno_con_prevision |= usa_prev
             vars_m = info["variables"]
             if usa_prev:  # añadir las columnas de previsión a cada tabla de variables
-                X_esc_h, X_cen_h, X_base_h = (pd.concat([X, P[k]], axis=1) for X, k in
+                # ...y las de intercambio aire-mar previsto, recalculadas con el agua y la previsión del escenario
+                X_esc_h, X_cen_h, X_base_h = (pd.concat([X, M.con_fisica(P[k], X)], axis=1) for X, k in
                                               ((X_esc, "esc"), (X_cen, "cen"), (X_base, "base")))
             else:
                 X_esc_h, X_cen_h, X_base_h = X_esc, X_cen, X_base
@@ -259,8 +260,7 @@ class MotorEscenarios:
             dif = sst_esc - sst_base                                  # emparejada: sin error del modelo
 
             # Explicación del cambio: SHAP (escenario central - base), agrupado
-            expl = self.g._explicador(clave)
-            d_shap = expl(X_cen_h[vars_m]).values[0] - expl(X_base_h[vars_m]).values[0]
+            d_shap = m.contribuciones(X_cen_h[vars_m])[0][0] - m.contribuciones(X_base_h[vars_m])[0][0]
             cambio = pd.Series(d_shap, index=vars_m).groupby([grupo_variable(c) for c in vars_m]).sum()
             cambio = cambio[cambio.abs() > 1e-4].sort_values(key=np.abs, ascending=False)
 

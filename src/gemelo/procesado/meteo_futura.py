@@ -14,7 +14,7 @@ Nunca usan la temperatura del agua futura: solo aire, viento, lluvia y radiació
 import numpy as np
 import pandas as pd
 
-from gemelo.procesado.features import _doy
+from gemelo.procesado.features import PARES_AIRE_MAR, _doy
 
 VENTANAS = (1, 3, 7)
 # variable diaria -> cómo se agrega en la ventana
@@ -152,14 +152,33 @@ def fuente_prevision(prev_por_punto: dict[str, dict[int, pd.DataFrame]]):
     return lambda var, p, k: prev_por_punto[p][k][var]
 
 
+def fisica_prevista(prev: pd.DataFrame, anom: pd.DataFrame, ventanas=VENTANAS) -> pd.DataFrame:
+    """Intercambio aire-mar PREVISTO: aire previsto (anomalía media de la ventana) frente al agua de HOY, y su
+    producto con el viento previsto. `prev` tiene las columnas prev{w}_*; `anom`, las anom_{zona}_lag0.
+    Las filas se emparejan por posición (mismo orden), no por índice: sirve para tablas por fecha y por muestra."""
+    cols = {}
+    for z, p in PARES_AIRE_MAR:
+        for w in ventanas:
+            d = prev[f"prev{w}_t2m_anom_{p}"].values - anom[f"anom_{z}_lag0"].values
+            cols[f"prev{w}_aire_agua_{p}_{z}"] = d
+            cols[f"prev{w}_flujo_{p}_{z}"] = d * prev[f"prev{w}_viento_{p}"].values
+    return pd.DataFrame(cols, index=prev.index)
+
+
+def con_fisica(prev: pd.DataFrame, anom: pd.DataFrame) -> pd.DataFrame:
+    return pd.concat([prev, fisica_prevista(prev, anom)], axis=1)
+
+
 # ------------------------------------------------------------------ preparación (pipeline y servicio)
-def preparar(cfg: dict, diario: pd.DataFrame, ref: pd.DataFrame, indice: pd.DatetimeIndex):
-    """Tablas de variables futuras desde ERA5 y desde la previsión real corregida.
+def preparar(cfg: dict, diario: pd.DataFrame, ref: pd.DataFrame, ds: pd.DataFrame):
+    """Tablas de variables futuras desde ERA5 y desde la previsión real corregida, para los días de `ds`
+    (el dataset de SST, del que se toman las anomalías de hoy para las variables de intercambio aire-mar).
     Devuelve (f_era5, f_prev, prev_corregida, sesgos); las tres últimas son None si no hay previsiones."""
     from gemelo.config import DATA_RAW
     puntos, p = list(cfg["meteo"]["puntos"]), cfg["prevision"]
     corr = p.get("correccion", {"metodo": "fija"})
-    f_era5 = construir(fuente_era5(diario), puntos, ref, indice)
+    indice = ds.index
+    f_era5 = con_fisica(construir(fuente_era5(diario), puntos, ref, indice), ds)
     prev, sesgos = {}, {}
     for pt in puntos:
         ruta = DATA_RAW / "meteo" / f"prevision_{pt}.parquet"
@@ -172,7 +191,7 @@ def preparar(cfg: dict, diario: pd.DataFrame, ref: pd.DataFrame, indice: pd.Date
         else:
             prev[pt] = corregir_causal(bruto, diario, pt, corr["metodo"], retraso=corr["retraso_dias"],
                                        dias_movil=corr["dias_movil"], margen_estacional=corr["margen_estacional"])
-    f_prev = construir(fuente_prevision(prev), puntos, ref, indice)
+    f_prev = con_fisica(construir(fuente_prevision(prev), puntos, ref, indice), ds)
     return f_era5, f_prev, prev, sesgos
 
 

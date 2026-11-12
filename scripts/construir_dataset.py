@@ -97,7 +97,7 @@ if __name__ == "__main__":
          f"por año: {hip.groupby('anio').y_hipoxia.sum().astype(int).to_dict()}")
 
     paso("5/6 meteorología futura (ERA5 y previsión real corregida)")
-    f_era5, f_prev, prev, sesgos = meteo_futura.preparar(cfg, diario, ref, sst.index)
+    f_era5, f_prev, prev, sesgos = meteo_futura.preparar(cfg, diario, ref, sst)
     f_era5.to_parquet(PROCESSED / "meteo_futura_era5.parquet")
     if f_prev is None:
         paso("    sin previsiones descargadas (scripts/descargar_previsiones.py): solo ERA5")

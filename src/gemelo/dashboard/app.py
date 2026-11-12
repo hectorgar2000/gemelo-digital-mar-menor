@@ -262,13 +262,17 @@ with tab_modelos:
             "Respaldo": f"v{v['respaldo']['version_registro']}" if v["respaldo"] else "—",
             "Datos hasta": v.get("datos_hasta"),
             # métrica de la evaluación con la que se promocionó cada versión
-            "RMSE (°C)": me.get("rmse_retador", me.get("rmse_B_real", me.get("test_rmse"))),
-            "Mejora": (f"{me['mejora']:+.1%} vs versión anterior (reentreno)" if "mejora" in me
+            "Receta": ("física + pesos" + (" + lineal" if v.get("con_parte_lineal") else "")
+                       if v.get("receta") == "fisica_pesos" else "clásica"),
+            "RMSE (°C)": me.get("rmse_nueva", me.get("rmse_retador", me.get("rmse_B_real", me.get("test_rmse")))),
+            "Mejora": (f"{me['mejora']:+.1%} vs receta clásica (fuera de muestra)" if "rmse_nueva" in me
+                       else f"{me['mejora']:+.1%} vs versión anterior (reentreno)" if "mejora" in me
                        else f"{me['skill_Breal_vs_A']:+.1%} vs sin previsión" if "skill_Breal_vs_A" in me
                        else f"{me.get('test_skill_vs_amortiguada', 0):+.1%} vs pers. amortiguada"),
         })
     st.dataframe(pd.DataFrame(filas).sort_values(["Zona", "Horizonte (d)"]), hide_index=True, width="stretch")
-    st.caption("RMSE del cambio de anomalía en la evaluación con la que se promocionó cada versión: reentrenos, "
+    st.caption("RMSE del cambio de anomalía en la evaluación con la que se promocionó cada versión: receta nueva, modelos "
+               "hasta 2021 evaluados con previsiones reales de 2024–2026 (30 días: 2022–2026); reentrenos, "
                "últimos 180 días frente a la versión anterior; con previsión, ventana honesta ago-2024 → sep-2026; "
                "sin previsión, test 2022–2026. El respaldo se usa los días sin previsión archivada (antes de feb-2024).")
     st.subheader("Salud de los modelos (monitor de deriva)")

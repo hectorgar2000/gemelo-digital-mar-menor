@@ -33,7 +33,7 @@ app = FastAPI(
     title="Gemelo digital del Mar Menor",
     description="Predicción de temperatura del mar y olas de calor marinas (laguna y costa) y riesgo de "
                 "hipoxia, con intervalos de incertidumbre y explicaciones SHAP.",
-    version="0.9.0",
+    version="0.10.0",
     lifespan=ciclo_de_vida,
 )
 
@@ -124,7 +124,8 @@ def modelos():
         "exportado": m["creado"], "git_commit": m["git_commit"],
         "sst": {k: {"zona": v["zona"], "h": v["h"], "version_registro": v["version_registro"],
                     "usa_prevision_meteo": v.get("usa_prevision", False), "metricas": v["metricas"],
-                    "datos_hasta": v.get("datos_hasta"),
+                    "datos_hasta": v.get("datos_hasta"), "receta": v.get("receta", "clasica"),
+                    "con_parte_lineal": bool(v.get("lineal")),
                     "respaldo": ({"version_registro": v["respaldo"]["version_registro"],
                                   "metricas": v["respaldo"]["metricas"]} if v.get("respaldo") else None)}
                 for k, v in m["sst"].items()},

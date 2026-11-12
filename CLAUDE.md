@@ -83,6 +83,15 @@
 - CesiumJS 1.120.0 por CDN, sin Cesium ion. En Docker el enlace del dashboard usa `GEMELO_API_URL_PUBLICA`.
 - Las capturas del visor con WebGL pueden salir en negro o sin mapa si se toman antes de componer o de cargar las teselas: comprobar el estado (`visor.scene.globe.tilesLoaded`) antes de dar algo por roto.
 
+## Mejora de modelos (ver docs/mejora_modelos.md) · v0.10.0
+- Protocolo para cualquier mejora futura: desarrollo con `scripts/experimentos_mejora.py` (origen móvil 2014–2021, nada de 2022+) → confirmación única y promoción con `scripts/promocionar_receta.py` (regla: mejora ≥ 2 % e IC90 por bloques > 0).
+- Receta `fisica_pesos` (`gemelo.modelos.receta`): variables físicas (`aire_agua_*`, `flujo_*`, `prev{w}_aire_agua_*`, `prev{w}_flujo_*`; `features.es_fisica`), lr 0,02 con 2,5× árboles, pesos recientes (semivida 8 años); a 30 días, media 50/50 con ridge. En producción: h=3/7/30 (laguna v4/v3/v3, costa v4/v4/v3); h=1 sigue en `clasica` (v3).
+- `gemelo.modelos.conjunto.ModeloSST` envuelve TODOS los modelos de SST (árboles + lineal opcional): usar `m.predict(X)` y `m.contribuciones(X)` (SHAP aditivo); no usar `shap.TreeExplainer` directamente sobre los modelos servidos.
+- Las variables físicas previstas se calculan con `meteo_futura.con_fisica(prev, anom)` (pipeline y escenarios).
+- Cada versión guarda `residuos_validacion` (errores fuera de muestra con fecha) → `Gemelo.con_residuos_guardados`; sin ellos la P(ola de calor) degenera. Tras promocionar o reentrenar, comprobar que `metodo_intervalo` empieza por `conformal`.
+- Descartado con datos: huber, más regularización, híbrido lineal+residuo, ridge solo (salvo en la media a 30 días).
+- **Pendiente:** verificar Docker 0.10.0; cobertura del intervalo al 90 % nominal; saturación de árboles a 1–7 días; hipoxia (sin datos nuevos); reentrenar respaldos. **Siguiente tarea pedida por el usuario: la parte visual.**
+
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.
 - Al entrenar o evaluar a horizonte h, usar `features.filas_de_particion()` (purga de frontera).

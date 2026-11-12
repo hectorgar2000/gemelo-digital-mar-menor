@@ -74,6 +74,7 @@ class Monitor:
             hasta = self.g.datos_hasta(info)
             res = y - pred
             res = res[res.index + pd.Timedelta(days=h) > hasta]   # solo errores fuera de muestra (como la API)
+            res = self.g.con_residuos_guardados(res.dropna(), info)   # + los guardados al promocionar (como la API)
             # misma función (cascada estacional) que usa la API en Gemelo.residuos_recientes
             iv = D.intervalos_cascada(res, fechas, h, self.g.cfg_intervalo,
                                       (q["0.05"], q["0.95"])).reindex(X.index)

@@ -9,6 +9,8 @@ import pandas as pd
 ZONAS = ["laguna", "costa"]
 LAGS_SST = [0, 1, 2, 3, 7, 14, 30]
 VENTANAS = [3, 7, 14, 30]
+# Intercambio de calor aire-mar: (zona de agua, punto meteorológico). Ver es_fisica().
+PARES_AIRE_MAR = [("laguna", "cuenca"), ("laguna", "mar"), ("costa", "mar"), ("costa", "cuenca")]
 LLUVIA_FUERTE_MM = 30  # día de lluvia intensa (la DANA de 2019 dejó 84 y 90 mm)
 TOPE_DIAS_DESDE = 365
 
@@ -167,6 +169,14 @@ def construir_dataset_sst(diario: pd.DataFrame, cfg: dict, ref: pd.DataFrame | N
         X[f"vientomax_{p}"] = diario[f"vientomax_{p}"]
         X[f"rad_{p}_media7"] = diario[f"rad_{p}"].rolling(7).mean()
 
+    # Intercambio aire-mar: el flujo de calor depende de (T_aire - T_agua) y del viento. Con las dos anomalías
+    # por separado el modelo tenía que deducir la diferencia; explícita mejora sobre todo los días extremos.
+    for z, p in PARES_AIRE_MAR:
+        dif = diario[f"t2m_{p}"] - diario[f"sst_{z}"]
+        X[f"aire_agua_{p}_{z}"] = dif
+        X[f"aire_agua_{p}_{z}_media7"] = dif.rolling(7).mean()
+        X[f"flujo_{p}_{z}"] = dif * diario[f"viento_{p}"]
+
     # Calendario: seno/coseno para que el 31-dic y el 1-ene queden "cerca"
     doy = _doy(diario.index)
     X["doy_sin"] = np.sin(2 * np.pi * doy / 365)
@@ -212,6 +222,7 @@ def construir_dataset_hipoxia(campanas: pd.DataFrame, dataset_sst: pd.DataFrame,
 # ---------------------------------------------------------------- grupos (para SHAP agrupado)
 GRUPOS = [  # (grupo, función que reconoce la columna); el primero que encaja gana
     ("meteo_prevista", lambda c: c.startswith("prev") and c[4:5].isdigit()),  # Fase 7: prev{w}_...
+    ("intercambio_aire_mar", lambda c: es_fisica(c)),
     ("calendario", lambda c: c.startswith("doy_")),
     ("oxigeno_in_situ", lambda c: "o2_" in c or "hipoxia" in c or "anoxia" in c),
     ("estratificacion", lambda c: "estrat" in c or "mld_" in c),
@@ -225,6 +236,11 @@ GRUPOS = [  # (grupo, función que reconoce la columna); el primero que encaja g
     ("viento", lambda c: "viento" in c),
     ("aire_y_radiacion", lambda c: c.startswith(("t2m", "t2max", "rad_"))),
 ]
+
+
+def es_fisica(col: str) -> bool:
+    """Variables de intercambio aire-mar (observadas: aire_agua_*, flujo_*; previstas: prev{w}_aire_agua_*, prev{w}_flujo_*)."""
+    return "aire_agua_" in col or "flujo_" in col
 
 
 def grupo_variable(col: str) -> str:

@@ -82,6 +82,7 @@ python scripts/entrenar_sst_prevision.py
 python scripts/registrar_modelos.py                          # @produccion (SST e hipoxia)
 python scripts/registrar_modelos.py --modelos sst_prevision  # v2 con previsión; v1 -> @sin_prevision
 python scripts/exportar_modelos.py                           # -> models/servicio (lo que carga la API)
+python scripts/promocionar_receta.py --promover              # receta mejorada (física + pesos) donde gana >= 2 %
 python scripts/monitorizar.py --calibrar                     # umbrales del monitor + data/processed/monitor.json
 ```
 
@@ -96,9 +97,9 @@ docker compose up --build
 python scripts/ciclo_mantenimiento.py
 ```
 
-> **Nota sobre resultados:** al reproducir se obtienen los modelos v1/v2. Las versiones reentrenadas (v3) aparecen al ejecutar el ciclo de mantenimiento. Si se descarga en otra fecha, los reanálisis de Copernicus pueden traer más días y las cifras pueden variar ligeramente respecto a los informes.
+> **Nota sobre resultados:** los números de versión dependen del orden de ejecución (el ciclo de mantenimiento y la promoción de la receta crean versiones nuevas). Si se descarga en otra fecha, los reanálisis de Copernicus pueden traer más días y las cifras pueden variar ligeramente respecto a los informes.
 
-**Tests:** 76 en total, incluidos los anti-fuga, la API, los escenarios, el monitor y el dashboard. En un clon sin `data/` ni `models/` pasan 44 y se **saltan** 32 con un aviso que indica qué ejecutar. Con todo generado, pasan los 76.
+**Tests:** 86 en total, incluidos los anti-fuga, la API, los escenarios, el monitor y el dashboard. En un clon sin `data/` ni `models/` pasan los que no dependen de ellos y el resto se **salta** con un aviso que indica qué ejecutar. Con todo generado, pasan los 86.
 
 ## Estructura
 ```
@@ -127,6 +128,7 @@ Dockerfile, Dockerfile.dashboard, compose.yaml
 | 4 · MLaaS mínimo | Registro, API y Docker ([detalle](docs/fase4_mlaas.md)) | ✅ |
 | 5 · Escenarios | `/scenario` con incertidumbre ([detalle](docs/fase5_escenarios.md)) | ✅ |
 | 6 · Dashboard | Streamlit de punta a punta ([detalle](docs/fase6_dashboard.md)) | ✅ |
+| Mejora de modelos | Variables físicas, pesos recientes y modelo combinado: −4 % de error, −10 % en extremos ([detalle](docs/mejora_modelos.md)) | ✅ |
 | 7 · Evolución | Previsión meteorológica ([detalle](docs/fase7_prevision.md)) · deriva y reentrenamiento ([detalle](docs/fase7_deriva.md)) · visor 3D/4D ([detalle](docs/fase7_visor4d.md)) | ✅ |
 
 ## Fuentes de datos

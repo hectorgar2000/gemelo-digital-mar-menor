@@ -65,6 +65,11 @@ def test_predict_sin_fecha_usa_el_ultimo_dia(cliente):
     p = cliente.post("/predict", json={"zona": "costa", "horizontes": [3]}).json()["predicciones"][0]
     assert p["fecha_base"] == ultima
     assert p["sst_real"] is None  # el futuro aún no se conoce
+    # aunque el modelo se haya reajustado con todos los datos, el intervalo usa sus errores fuera de muestra
+    # guardados: la probabilidad de ola de calor no puede quedar reducida a 0 / 0,5 / 1
+    todas = cliente.post("/predict", json={"zona": "laguna", "horizontes": [1, 3, 7, 30]}).json()["predicciones"]
+    assert all(x["metodo_intervalo"].startswith("conformal") for x in todas)
+    assert len({x["prob_superar_umbral"] for x in todas}) > 2
 
 
 def test_explain_suma_shap_igual_a_prediccion(cliente):
@@ -75,6 +80,16 @@ def test_explain_suma_shap_igual_a_prediccion(cliente):
     # los grupos suman TODAS las variables (no solo el top): base + grupos = predicción
     total = e["valor_base"] + sum(g["contribucion"] for g in e["grupos"])
     assert total == pytest.approx(e["prediccion"], abs=1e-2)  # SHAP es aditivo
+
+
+def test_modelo_combinado_a_30_dias_se_sirve_y_se_explica(cliente):
+    """Si el modelo a 30 días es de la receta nueva (árboles + lineal), la explicación sigue siendo aditiva."""
+    p = cliente.post("/predict", json={"zona": "costa", "horizontes": [30], "fecha": "2025-03-01"}).json()["predicciones"][0]
+    e = cliente.post("/explain", json={"zona": "costa", "h": 30, "fecha": "2025-03-01", "top": 5}).json()
+    total = e["valor_base"] + sum(g["contribucion"] for g in e["grupos"])
+    assert total == pytest.approx(e["prediccion"], abs=1e-2)
+    assert e["prediccion"] == pytest.approx(p["cambio_anomalia_previsto"], abs=1e-3)
+    assert p["modelo"]["receta"] in ("clasica", "fisica_pesos")
 
 
 def test_hipoxia(cliente):

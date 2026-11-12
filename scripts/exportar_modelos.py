@@ -40,16 +40,26 @@ def exportar_sst(client, nombre, alias, sufijo=""):
         cuantiles = json.load(f)
     variables = modelo.get_booster().feature_names
     usa_prevision = mv.tags.get("usa_prevision") == "true"
+    # errores fuera de muestra de la evaluación (con fecha): alimentan el intervalo mientras no haya datos nuevos
+    residuos = None
+    if mv.tags.get("residuos") == "true":
+        with open(client.download_artifacts(run.info.run_id, "residuos_validacion.json"), encoding="utf-8") as f:
+            residuos = json.load(f)
+    lineal = None
+    if mv.tags.get("lineal") == "true":   # parte lineal del modelo combinado (receta fisica_pesos a 30 días)
+        with open(client.download_artifacts(run.info.run_id, "lineal.json"), encoding="utf-8") as f:
+            lineal = json.load(f)
     # hasta qué fecha OBJETIVO vio datos el modelo (los de las fases 3-7 se entrenaron hasta fin de validación)
     datos_hasta = mv.tags.get("datos_hasta", cargar_config()["particion"]["validacion"][1])
     print(f"  {nombre}@{alias} v{mv.version} -> {fichero}" + (" (con previsión)" if usa_prevision else ""))
     return {
         "fichero": fichero, "version_registro": int(mv.version), "run_id": run.info.run_id, "variables": variables,
         "usa_prevision": usa_prevision, "datos_hasta": datos_hasta,
+        "receta": mv.tags.get("receta", "clasica"), "lineal": lineal, "residuos_validacion": residuos,
         "ventana_meteo": int(mv.tags["ventana_meteo"]) if usa_prevision else None,
         "cuantiles_residuo_validacion": cuantiles,
         "metricas": {k: round(v, 4) for k, v in run.data.metrics.items()
-                     if k.startswith(("test_", "rmse_", "skill_", "f1_", "mejora"))},
+                     if k.startswith(("test_", "rmse_", "skill_", "f1_", "mejora", "ic"))},
     }
 
 

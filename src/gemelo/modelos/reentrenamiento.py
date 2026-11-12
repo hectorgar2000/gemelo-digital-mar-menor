@@ -7,14 +7,13 @@
     (previsión REAL si el modelo la usa). El retador solo gana si mejora >= `mejora_minima`.
   - Si gana, se reajusta con todos los datos (incluida la ventana) y ESE es el que se despliega: el objetivo
     del reentrenamiento es aprender el régimen más reciente.
+
+El entrenamiento en sí está en gemelo.modelos.receta (el retador usa la receta de su campeón).
 """
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-import xgboost as xgb
-
-from gemelo.modelos.sst import PARAMS_FIJOS
 
 
 @dataclass
@@ -31,11 +30,6 @@ def ventana_evaluacion(ultimo_dato: pd.Timestamp, h: int, dias: int) -> Ventana:
 def mascara_entrenamiento(indice: pd.DatetimeIndex, hasta_objetivo: pd.Timestamp, h: int) -> np.ndarray:
     """Filas cuyo OBJETIVO (t + h) es anterior a `hasta_objetivo` (purga de frontera)."""
     return np.asarray(indice + pd.Timedelta(days=h) < pd.Timestamp(hasta_objetivo))
-
-
-def entrenar(X: pd.DataFrame, y: pd.Series, params: dict, n_arboles: int) -> xgb.XGBRegressor:
-    ok = y.notna() & X.notna().all(axis=1)
-    return xgb.XGBRegressor(**PARAMS_FIJOS, **params, n_estimators=n_arboles).fit(X[ok], y[ok], verbose=False)
 
 
 def decidir(rmse_campeon: float, rmse_retador: float, mejora_minima: float) -> tuple[bool, float]:
