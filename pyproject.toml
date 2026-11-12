@@ -34,7 +34,10 @@ ml = ["scikit-learn", "xgboost", "shap", "mlflow", "matplotlib"]
 api = ["fastapi", "uvicorn", "httpx", "scikit-learn", "xgboost", "shap"]
 # Fase 6: dashboard (cliente HTTP de la API: no carga modelos)
 dashboard = ["streamlit", "plotly", "httpx"]
-dev = ["jupyterlab", "pytest", "ruff"]
+dev = ["pytest", "ruff"]
+# Solo para abrir los notebooks. Aparte porque JupyterLab trae rutas de fichero muy profundas: en Windows,
+# si el proyecto está en una carpeta con ruta larga, supera el límite de 260 caracteres y la instalación falla.
+notebooks = ["jupyterlab", "ipykernel"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

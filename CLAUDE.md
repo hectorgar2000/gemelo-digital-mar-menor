@@ -43,7 +43,7 @@
 - Hipoxia: la logística anticipa 4/9 inicios (28 falsas alarmas); XGBoost no supera a la persistencia. Para la API: logística como alerta temprana.
 
 ## Estado tras la Fase 4 (ver docs/fase4_mlaas.md)
-- Dependencias por grupos: `.[datos,ml,api,dev]`. La API (`.[api]`) no lleva MLflow ni stack geoespacial.
+- Dependencias por grupos: `.[datos,ml,api,dashboard,dev]` (+ `notebooks` aparte: JupyterLab falla en Windows con rutas largas). La API (`.[api]`) no lleva MLflow ni stack geoespacial.
 - Flujo: entrenar → `registrar_modelos.py` (@produccion) → `exportar_modelos.py` (models/servicio) → API/Docker.
 - `gemelo.servicio.motor.Gemelo` es el motor reutilizable (escenarios en la Fase 5 y dashboard en la Fase 6): `predecir(zona, h, fecha, X=...)` acepta una fila modificada.
 - Intervalo: conformal con ventana móvil de 365 días (cobertura en test del 86–89 %).

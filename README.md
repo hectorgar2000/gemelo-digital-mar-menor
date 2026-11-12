@@ -1,75 +1,135 @@
 # Gemelo digital marino — Mar Menor
 
-Réplica virtual del **Mar Menor y su costa adyacente** alimentada con datos oceanográficos reales (Copernicus Marine y la UPCT), sobre la que unos modelos de IA:
+Réplica virtual del **Mar Menor y su costa** alimentada con datos reales (Copernicus Marine, ERA5 y previsiones de Open-Meteo, y las campañas in situ de la UPCT). Sus modelos de IA:
 
-1. **Describen** el estado actual del agua (temperatura, clorofila, oxígeno).
-2. **Predicen** la temperatura superficial y el riesgo de **ola de calor marina** a 1, 3, 7 y 30 días.
-3. **Simulan escenarios** *what-if* (p. ej. +1,5 °C) con incertidumbre.
-4. **Explican** sus predicciones con XAI (SHAP).
+1. **Describen** el estado del agua: temperatura, ola de calor en curso y oxígeno.
+2. **Predicen** la temperatura superficial y las **olas de calor marinas** a 1, 3, 7 y 30 días, con intervalo de incertidumbre, y el **riesgo de hipoxia**.
+3. **Simulan escenarios** "qué pasaría si" con incertidumbre (Monte Carlo).
+4. **Explican** cada predicción con SHAP.
 
-Módulo secundario: riesgo de **hipoxia** en la laguna a partir de los datos in situ de la UPCT.
+Todo se sirve como **MLaaS**:
+- Modelos versionados en MLflow.
+- API FastAPI en Docker.
+- Dashboard Streamlit.
+- Visor 4D con CesiumJS.
+- Ciclo de mantenimiento que vigila la deriva y reentrena.
 
-Los modelos se sirven como **MLaaS**: entrenados, versionados en MLflow y expuestos con FastAPI.
+📄 **[Informe final](docs/informe_final.md)**: resultados, decisiones, limitaciones y trabajo futuro.
 
-Alcance detallado: [docs/alcance.md](docs/alcance.md).
+## Qué hay
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| API | `http://localhost:8000/docs` | `/predict`, `/explain`, `/scenario`, `/hipoxia/predict`, `/estado`, `/series`, `/monitor`, `/cubo`… |
+| Dashboard | `http://localhost:8501` | Estado y predicción, escenarios, XAI, hipoxia y salud de los modelos |
+| Visor 4D | `http://localhost:8000/visor/` | Cubos in situ (O₂, T, S…) en 3D a lo largo de 380 campañas |
+| Experimentos | `mlflow ui --backend-store-uri sqlite:///mlflow.db` | Ejecuciones, métricas, SHAP y Model Registry |
 
-## Estructura
-
+## Arranque rápido (si ya tienes `data/processed` y `models/servicio`)
+```bash
+docker compose up --build
 ```
-config/zona.yaml     zona, periodos, umbrales y dataset_id (fuente única de verdad)
-data/raw/            descargas originales (fuera de git)
-data/interim/        datos intermedios (fuera de git)
-data/processed/      dataset de entrenamiento en Zarr/Parquet (fuera de git)
-docs/                documentación del proyecto
-models/              modelos entrenados (fuera de git)
-notebooks/           exploración
-scripts/             puntos de entrada ejecutables (descarga, entrenamiento…)
-src/gemelo/          paquete Python: ingesta, procesado, modelos, xai
-tests/               tests
+O sin Docker, en dos terminales:
+```bash
+uvicorn gemelo.servicio.api:app
+streamlit run src/gemelo/dashboard/app.py
 ```
 
-## Puesta en marcha (Windows)
+## Reproducir desde cero
+Probado en Windows 11 con Python 3.13. Las imágenes Docker usan Python 3.13 sobre Linux. `requirements.lock.txt` fija las versiones exactas.
 
+`data/`, `models/`, `mlflow.db` y `mlartifacts/` **no están en git**: se regeneran con estos pasos, en este orden.
+
+**1. Entorno**
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -e ".[datos,ml,api,dev]"
+pip install -c requirements.lock.txt -e ".[datos,ml,api,dashboard,dev]"
+```
+Para abrir los notebooks de exploración, instala además el grupo `notebooks` y registra el kernel:
+```bash
+pip install -c requirements.lock.txt -e ".[notebooks]"
 python -m ipykernel install --sys-prefix --name gemelo --display-name "Python (gemelo)"
+```
+> **Windows y rutas largas:** JupyterLab trae ficheros con rutas muy profundas. Si el proyecto está en una carpeta con ruta larga, la instalación de `notebooks` falla por el límite de 260 caracteres. Clónalo en una ruta corta (p. ej. `C:\gemelo`) o [activa las rutas largas de Windows](https://pip.pypa.io/warnings/enable-long-paths). El resto de grupos no se ve afectado.
+
+**2. Credenciales de Copernicus Marine** (cuenta gratuita en marine.copernicus.eu). Se guardan en `%USERPROFILE%\.copernicusmarine`, nunca en el repositorio.
+```bash
 copernicusmarine login
+```
+
+**3. Descargas** (≈ 20–30 min en total; la UPCT es la más lenta). Van a `data/raw/`.
+```bash
 python scripts/descargar_copernicus.py
 python scripts/descargar_upct.py
 python scripts/descargar_meteo.py
-python scripts/construir_dataset.py
-pytest
-python scripts/entrenar_sst.py
-python scripts/entrenar_hipoxia.py
-mlflow ui --backend-store-uri sqlite:///mlflow.db
-python scripts/registrar_modelos.py     # Model Registry, alias @produccion
-python scripts/exportar_modelos.py      # -> models/servicio (artefacto de la API)
-uvicorn gemelo.servicio.api:app         # http://127.0.0.1:8000/docs
-streamlit run src/gemelo/dashboard/app.py   # dashboard (necesita la API arrancada)
-python scripts/ciclo_mantenimiento.py   # monitor de deriva -> reentrenamiento si hace falta -> exportar
-docker compose up --build               # API (:8000) + dashboard (:8501) en contenedores
-                                        # visor 4D: http://localhost:8000/visor/
+python scripts/descargar_previsiones.py
 ```
 
-Los notebooks usan el kernel **Python (gemelo)**.
+**4. Procesado** (≈ 3 min): series por subzona, variables, objetivos, meteorología futura, cubo 4D y manifiesto. Va a `data/processed/`.
+```bash
+python scripts/construir_dataset.py
+```
 
-Las credenciales de Copernicus se guardan en `%USERPROFILE%\.copernicusmarine`, nunca en el repositorio.
+**5. Entrenamiento** (≈ 25 min). Queda registrado en MLflow.
+```bash
+python scripts/entrenar_sst.py
+python scripts/entrenar_hipoxia.py
+python scripts/entrenar_sst_prevision.py
+```
+
+**6. Registro, exportación y monitor**
+```bash
+python scripts/registrar_modelos.py                          # @produccion (SST e hipoxia)
+python scripts/registrar_modelos.py --modelos sst_prevision  # v2 con previsión; v1 -> @sin_prevision
+python scripts/exportar_modelos.py                           # -> models/servicio (lo que carga la API)
+python scripts/monitorizar.py --calibrar                     # umbrales del monitor + data/processed/monitor.json
+```
+
+**7. Comprobar y arrancar**
+```bash
+pytest
+docker compose up --build
+```
+
+**Mantenimiento** (se puede programar; ver el propio script):
+```bash
+python scripts/ciclo_mantenimiento.py
+```
+
+> **Nota sobre resultados:** al reproducir se obtienen los modelos v1/v2. Las versiones reentrenadas (v3) aparecen al ejecutar el ciclo de mantenimiento. Si se descarga en otra fecha, los reanálisis de Copernicus pueden traer más días y las cifras pueden variar ligeramente respecto a los informes.
+
+**Tests:** 76 en total, incluidos los anti-fuga, la API, los escenarios, el monitor y el dashboard. En un clon sin `data/` ni `models/` pasan 44 y se **saltan** 32 con un aviso que indica qué ejecutar. Con todo generado, pasan los 76.
+
+## Estructura
+```
+config/zona.yaml     zona, periodos, umbrales, dataset_id, monitor, intervalo… (fuente única de verdad)
+src/gemelo/          paquete Python
+  ingesta/           descargas (Copernicus, UPCT, ERA5, previsiones)
+  procesado/         series, variables, meteorología futura, in situ, cubo 4D
+  modelos/           SST, hipoxia, XAI, reentrenamiento
+  monitor/           deriva (PSI estacional, rendimiento, cobertura) e intervalos conformales
+  servicio/          motor del gemelo, escenarios, API FastAPI y visor 4D (visor/)
+  dashboard/         app Streamlit (solo consume la API)
+scripts/             puntos de entrada (descargar, construir, entrenar, registrar, exportar, monitorizar…)
+tests/               pytest
+notebooks/           exploración (Fase 1)
+docs/                informe final, alcance y documento de cada fase
+Dockerfile, Dockerfile.dashboard, compose.yaml
+```
 
 ## Roadmap
-
 | Fase | Entregable | Estado |
 |---|---|---|
-| 0 · Planteamiento | Repo y documento de alcance | ✅ |
-| 1 · Ingesta y exploración | Datos en `data/raw/` y notebook de exploración ([resumen](docs/fase1_resumen.md)) | ✅ |
+| 0 · Planteamiento | Repo y [documento de alcance](docs/alcance.md) | ✅ |
+| 1 · Ingesta y exploración | Datos y notebook de exploración ([resumen](docs/fase1_resumen.md)) | ✅ |
 | 2 · Procesado | Pipeline `raw → processed` ([resumen y revisión](docs/fase2_resumen.md)) | ✅ |
 | 3 · Primer modelo + XAI | XGBoost que bate a la línea base, con SHAP ([informe](docs/fase3_informe.md)) | ✅ |
-| 4 · MLaaS mínimo | API `/predict` y `/explain` con Docker ([detalle](docs/fase4_mlaas.md)) | ✅ |
+| 4 · MLaaS mínimo | Registro, API y Docker ([detalle](docs/fase4_mlaas.md)) | ✅ |
 | 5 · Escenarios | `/scenario` con incertidumbre ([detalle](docs/fase5_escenarios.md)) | ✅ |
 | 6 · Dashboard | Streamlit de punta a punta ([detalle](docs/fase6_dashboard.md)) | ✅ |
-| 7 · Evolución | Previsión meteo como entrada ✅ ([detalle](docs/fase7_prevision.md)) · deriva y reentrenamiento ✅ ([detalle](docs/fase7_deriva.md)) · visor 3D/4D ✅ ([detalle](docs/fase7_visor4d.md)) | ✅ |
+| 7 · Evolución | Previsión meteorológica ([detalle](docs/fase7_prevision.md)) · deriva y reentrenamiento ([detalle](docs/fase7_deriva.md)) · visor 3D/4D ([detalle](docs/fase7_visor4d.md)) | ✅ |
 
 ## Fuentes de datos
-- [Copernicus Marine Service](https://marine.copernicus.eu) — SST, clorofila, física y biogeoquímica del Mediterráneo.
-- [Servidor de Datos Científicos del Mar Menor (UPCT)](https://marmenor.upct.es) — oxígeno disuelto in situ.
+- [Copernicus Marine Service](https://marine.copernicus.eu): SST y clorofila por satélite, y física del Mediterráneo.
+- [Open-Meteo](https://open-meteo.com): ERA5 y previsiones archivadas (uso no comercial).
+- [Servidor de Datos Científicos del Mar Menor (UPCT)](https://marmenor.upct.es): oxígeno, temperatura, salinidad, clorofila y turbidez in situ.
