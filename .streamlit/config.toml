@@ -1,0 +1,6 @@
+# Tema del dashboard: azul marino en vez del rojo por defecto de Streamlit
+[theme]
+primaryColor = "#1f9bcf"
+
+[browser]
+gatherUsageStats = false

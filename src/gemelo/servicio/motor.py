@@ -57,6 +57,9 @@ class Gemelo:
         self.f_prev = pd.read_parquet(ruta_prev) if ruta_prev.exists() else None
         ruta_diaria = dir_datos / "prevision_diaria.parquet"
         self.prev_diaria = desde_tabla(pd.read_parquet(ruta_diaria)) if ruta_diaria.exists() else None
+        # contorno real de la laguna para el mapa (opcional: si no existe, el mapa dibuja el recuadro)
+        ruta_contorno = dir_datos / "contorno_laguna.json"
+        self.contornos = {"laguna": json.loads(ruta_contorno.read_text(encoding="utf-8"))} if ruta_contorno.exists() else {}
         # Los modelos finales se entrenaron con train + validación: para esas fechas, una
         # "predicción" del pasado no es honesta (el modelo ya vio la respuesta).
         cfg = cargar_config()
@@ -155,7 +158,7 @@ class Gemelo:
                         "umbral_ola_calor": round(float(hoy["umbral_ola_calor"]), 2),
                         "dias_sobre_umbral": racha,
                         "ola_calor_en_curso": racha >= cfg["umbrales"]["mhw_dias_min"],
-                        "caja": cfg["subzonas"][z]}
+                        "caja": cfg["subzonas"][z], "contorno": self.contornos.get(z)}
         ult = self.campanas[self.campanas <= fecha]
         campana = None
         if len(ult):

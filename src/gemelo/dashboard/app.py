@@ -4,6 +4,7 @@ Arrancar (con la API ya en marcha):
     streamlit run src/gemelo/dashboard/app.py
 La URL de la API se toma de GEMELO_API_URL (por defecto http://127.0.0.1:8000).
 """
+import re
 from datetime import date, timedelta
 
 import pandas as pd
@@ -45,6 +46,49 @@ def aviso_campana_antigua(fecha_campana, dia_base, max_dias: int = 14):
                    "terminan en julio de 2024.")
 
 
+def resumen_estado(zona: str, z: dict, p7: dict) -> tuple[str, str]:
+    """Una frase en lenguaje llano con lo esencial del día: (nivel, texto)."""
+    lugar = "La laguna" if zona == "laguna" else "La costa"
+    prob = p7["prob_superar_umbral"]
+    futuro = (f"A 7 días se prevén **{p7['sst_prevista']:.1f} °C** "
+              f"(entre {p7['intervalo_90'][0]:.1f} y {p7['intervalo_90'][1]:.1f} °C) y una probabilidad del "
+              f"**{prob:.0%}** de estar en ola de calor.")
+    if z["ola_calor_en_curso"]:
+        return "alerta", (f"🔴 **{lugar} está en ola de calor marina** desde hace {z['dias_sobre_umbral']} días: "
+                         f"{z['sst']:.1f} °C, {z['anomalia']:+.1f} °C sobre lo normal. {futuro}")
+    if prob >= 0.5 or z["anomalia"] > 1.0:
+        return "atencion", (f"🟠 **{lugar} está más cálida de lo normal** ({z['sst']:.1f} °C, {z['anomalia']:+.1f} °C), "
+                           f"sin ola de calor declarada. {futuro}")
+    return "normal", (f"🟢 **{lugar} está en valores normales** ({z['sst']:.1f} °C, {z['anomalia']:+.1f} °C respecto "
+                       f"a lo habitual). {futuro}")
+
+
+COLOR_ESTADO = {"alerta": "214,39,40", "atencion": "242,142,43", "normal": "44,160,44"}
+
+
+def aviso_estado(nivel: str, texto: str):
+    """Franja de color con el resumen. No se usa st.error: el estado del mar no es un error de la aplicación."""
+    html = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", texto)   # las negritas de Markdown no se aplican dentro de HTML
+    color = COLOR_ESTADO[nivel]
+    st.markdown(f'<div style="border-left: 6px solid rgb({color}); background: rgba({color},0.10); '
+                f'padding: 12px 16px; border-radius: 6px; margin-bottom: 12px;">{html}</div>', unsafe_allow_html=True)
+
+
+# Escenarios de un clic: valores de los controles (los no citados vuelven a su valor neutro)
+PRESETS = {
+    "🌡️ Aire muy cálido": {"temp_aire": 3.0, "viento": 0.7},
+    "💨 Temporal de viento": {"viento": 2.0, "temp_aire": -1.0},
+    "🍃 Semana en calma": {"viento": 0.5},
+    "🌍 Clima +1,5 °C": {"calentamiento_base": 1.5},
+}
+
+
+def aplicar_preset(valores: dict, controles: list):
+    for d, _, _, _, _, neutro in controles:
+        st.session_state[f"v_{d}"] = float(valores.get(d, neutro))
+    st.session_state.pop("escenario", None)
+
+
 def mostrar_escenario(r: dict):
     hs = r["sst"]["horizontes"]
     avisos = {a["variable"] for h in hs for a in h["fuera_de_rango"]}
@@ -82,7 +126,8 @@ def mostrar_escenario(r: dict):
 with st.sidebar:
     st.title("🌊 Gemelo digital")
     st.caption("Mar Menor y costa adyacente")
-    st.session_state.url = st.text_input("URL de la API", URL_POR_DEFECTO)
+    with st.expander("⚙️ Conexión"):   # antes de las llamadas: si la API falla, se puede corregir la URL
+        st.session_state.url = st.text_input("URL de la API", URL_POR_DEFECTO)
     salud = llamar("salud")
     estado_ult = llamar("estado")
     ini, fin = (date.fromisoformat(f) for f in estado_ult["rango_fechas"])
@@ -91,15 +136,13 @@ with st.sidebar:
                           help="Por defecto, el último día con datos. Elige un día pasado para comparar con lo que ocurrió.")
     fecha_iso = fecha.isoformat()
     st.divider()
-    st.link_button("🧊 Abrir visor 4D (CesiumJS)", f"{URL_PUBLICA.rstrip('/')}/visor/", width="stretch",
-                   help="Oxígeno, temperatura, salinidad… de las campañas in situ en 3D y a lo largo del tiempo")
     st.caption(f"API: {salud['estado']} · {salud['modelos_sst']} modelos de SST · datos hasta {salud['ultima_fecha']}")
     if fecha != fin:
         st.info("Día del pasado: verás también lo que pasó realmente.", icon="🕑")
 
 st.header(f"Mar Menor · {fecha:%d/%m/%Y}")
-tab_estado, tab_escenarios, tab_xai, tab_hipoxia, tab_modelos = st.tabs(
-    ["🌡️ Estado y predicción", "🧪 Escenarios", "🔍 Por qué (XAI)", "🫧 Hipoxia", "⚙️ Modelos"])
+tab_estado, tab_escenarios, tab_xai, tab_hipoxia, tab_visor, tab_modelos = st.tabs(
+    ["🌡️ Estado y predicción", "🧪 Escenarios", "🔍 Por qué (XAI)", "🫧 Hipoxia", "🧊 Visor 4D", "⚙️ Modelos"])
 
 # ------------------------------------------------------------------ 1. estado y predicción
 with tab_estado:
@@ -107,34 +150,44 @@ with tab_estado:
     z = est["zonas"][zona]
     preds = llamar("predecir", zona, HORIZONTES, fecha_iso)
     p7 = next(p for p in preds if p["h"] == 7)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Temperatura del agua", f"{z['sst']:.1f} °C", f"{z['anomalia']:+.2f} °C vs. normal", delta_color="inverse")
-    c2.metric("Ola de calor marina", "EN CURSO" if z["ola_calor_en_curso"] else "No")
-    c2.caption(f"{z['dias_sobre_umbral']} días seguidos sobre el umbral (se declara con ≥ 5)")
-    c3.metric("Previsión a 7 días", f"{p7['sst_prevista']:.1f} °C")
-    c3.caption(f"Intervalo 90 %: {p7['intervalo_90'][0]:.1f} – {p7['intervalo_90'][1]:.1f} °C · "
-               + ("🌦️ con previsión meteorológica" if p7["usa_prevision_meteo"] else "sin previsión meteorológica"))
-    c4.metric("Prob. ola de calor a 7 días", f"{p7['prob_superar_umbral']:.0%}")
-    c4.caption(f"Umbral ese día: {p7['umbral_ola_calor']:.1f} °C")
+    nivel, texto = resumen_estado(zona, z, p7)
+    aviso_estado(nivel, texto)
 
-    izq, der = st.columns([1, 2])
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Temperatura del agua", f"{z['sst']:.1f} °C", f"{z['anomalia']:+.2f} °C vs. normal",
+              delta_color="inverse", border=True)
+    c2.metric("Ola de calor marina", "En curso" if z["ola_calor_en_curso"] else "No",
+              f"{z['dias_sobre_umbral']} días sobre el umbral", delta_color="off", border=True,
+              help="Se declara con 5 días seguidos por encima del percentil 90 de esas fechas (base 1991–2020).")
+    c3.metric("Previsión a 7 días", f"{p7['sst_prevista']:.1f} °C",
+              f"{p7['sst_prevista'] - z['sst']:+.1f} °C respecto a hoy", delta_color="inverse", border=True,
+              help=f"Intervalo del 90 %: {p7['intervalo_90'][0]:.1f} – {p7['intervalo_90'][1]:.1f} °C. "
+                   + ("Usa la previsión meteorológica." if p7["usa_prevision_meteo"] else "Sin previsión meteorológica."))
+    c4.metric("Prob. de ola de calor a 7 días", f"{p7['prob_superar_umbral']:.0%}",
+              f"umbral {p7['umbral_ola_calor']:.1f} °C", delta_color="off", border=True)
+
+    izq, der = st.columns([2, 5])
     with izq:
-        st.plotly_chart(G.mapa(est), width="stretch")
-        st.caption("Color de cada zona: rojo = ola de calor en curso · naranja = más cálida de lo normal "
-                   "(> +0,5 °C) · azul = más fría · gris = normal. Puntos: celdas meteorológicas ERA5.")
+        st.plotly_chart(G.mapa(est, zona), width="stretch")
+        st.caption("🔴 ola de calor · 🟠 más cálida de lo normal · 🔵 más fría · ⚪ normal. "
+                   "Puntos: celdas de la meteorología (ERA5).")
     with der:
         desde = (fecha - timedelta(days=120)).isoformat()
         hasta = min(fecha + timedelta(days=35), fin).isoformat()
         serie = llamar("series", zona, desde, hasta)
-        st.plotly_chart(G.serie_con_prediccion(serie[serie.index <= pd.Timestamp(fecha)], preds, zona),
-                        width="stretch")
-    tabla = pd.DataFrame([{"Horizonte": f"{p['h']} d", "Fecha": p["fecha_objetivo"], "SST prevista": p["sst_prevista"],
-                           "Intervalo 90 %": f"{p['intervalo_90'][0]:.2f} – {p['intervalo_90'][1]:.2f}",
-                           "P(ola de calor)": f"{p['prob_superar_umbral']:.0%}", "Real": p["sst_real"],
+        st.plotly_chart(G.serie_con_prediccion(serie, preds, zona, fecha), width="stretch")
+    tabla = pd.DataFrame([{"Horizonte": f"{p['h']} d", "Fecha": pd.Timestamp(p["fecha_objetivo"]),
+                           "SST prevista": p["sst_prevista"],
+                           "Intervalo 90 %": f"{p['intervalo_90'][0]:.1f} – {p['intervalo_90'][1]:.1f} °C",
+                           "P(ola de calor)": p["prob_superar_umbral"], "Real": p["sst_real"],
                            "Modelo": f"v{p['modelo']['version_registro']} · "
                                      + ("con previsión" if p["usa_prevision_meteo"] else "sin previsión"),
                            "Visto en entrenamiento": "sí" if p["visto_en_entrenamiento"] else "no"} for p in preds])
-    st.dataframe(tabla, hide_index=True, width="stretch")
+    st.dataframe(tabla, hide_index=True, width="stretch", column_config={
+        "Fecha": st.column_config.DateColumn(format="DD/MM/YYYY"),
+        "SST prevista": st.column_config.NumberColumn(format="%.1f °C"),
+        "P(ola de calor)": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1),
+        "Real": st.column_config.NumberColumn(format="%.1f °C", help="Lo que ocurrió (solo en días del pasado)")})
     if any(p["visto_en_entrenamiento"] for p in preds):
         st.warning("Este día cae en el periodo de entrenamiento del modelo final (hasta 2021): comparar con lo real "
                    "no es una prueba honesta de su capacidad.")
@@ -154,6 +207,11 @@ with tab_escenarios:
         ("radiacion", "Radiación solar (× veces)", 0.5, 1.5, 0.05, 1.0),
         ("clorofila", "Clorofila (× veces)", 0.25, 4.0, 0.25, 1.0),
     ]
+    st.caption("Escenarios de un clic (después pulsa **Simular escenario**):")
+    botones = st.columns(len(PRESETS) + 1)
+    for b, (nombre, vals) in zip(botones, PRESETS.items()):
+        b.button(nombre, on_click=aplicar_preset, args=(vals, CONTROLES), width="stretch")
+    botones[-1].button("↺ Reiniciar", on_click=aplicar_preset, args=({}, CONTROLES), width="stretch")
     # Sin st.form a propósito: así los campos de incertidumbre aparecen al mover un control (en un
     # formulario no se actualizarían hasta enviarlo). La simulación solo se lanza con el botón.
     col_a, col_b = st.columns(2)
@@ -211,12 +269,12 @@ with tab_escenarios:
 with tab_xai:
     h = st.select_slider("Horizonte a explicar", HORIZONTES, value=7, format_func=lambda x: f"{x} días")
     e = llamar("explicar", zona, h, fecha_iso, 12)
-    st.markdown(f"El modelo predice un **cambio de {e['prediccion']:+.2f} °C** en la anomalía de temperatura dentro de "
-                f"{h} días (respecto a la de hoy). Las barras muestran **qué empuja** esa predicción: "
-                "🔴 hacia más calor que la persistencia, 🔵 hacia menos.")
-    c1, c2 = st.columns(2)
-    c1.plotly_chart(G.barras_grupos(e["grupos"], "Por grupo de variables"), width="stretch")
-    c2.plotly_chart(G.barras_variables(e["variables"], "Las 12 variables más influyentes"), width="stretch")
+    st.markdown(f"El modelo predice que, dentro de {h} días, la anomalía de temperatura habrá cambiado "
+                f"**{e['prediccion']:+.2f} °C** respecto a la de hoy. La cascada muestra cómo se llega a esa cifra: "
+                "🔴 lo que empuja a calentar, 🔵 lo que empuja a enfriar.")
+    c1, c2 = st.columns([3, 2])
+    c1.plotly_chart(G.cascada(e["grupos"], e["valor_base"], e["prediccion"]), width="stretch")
+    c2.plotly_chart(G.barras_variables(e["variables"], "Las 12 variables que más pesan"), width="stretch")
     st.caption(e["nota"])
     with st.expander("¿Cómo leer esto?"):
         st.markdown(
@@ -235,11 +293,14 @@ with tab_hipoxia:
                            help="Por defecto, la última campaña anterior al día base.")
         hx = llamar("hipoxia", sel)
         aviso_campana_antigua(sel, fecha)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Prob. de hipoxia en la próxima campaña", f"{hx['prob_hipoxia_siguiente']:.0%}")
-        c2.metric("Alerta temprana", "SÍ" if hx["alerta_temprana"] else "No")
-        c3.metric("% del fondo en hipoxia ahora", f"{hx['pct_fondo_hipoxia_actual']:.1f} %",
-                  "hipoxia actual" if hx["hipoxia_actual"] else None, delta_color="off")
+        c1, c2, c3 = st.columns([2, 1, 1])
+        c1.plotly_chart(G.aguja(hx["prob_hipoxia_siguiente"], titulo="Riesgo de hipoxia en la próxima campaña"),
+                        width="stretch")
+        c2.metric("Alerta temprana", "Sí" if hx["alerta_temprana"] else "No", border=True,
+                  help="Se activa cuando la probabilidad supera el 50 %.")
+        c3.metric("Fondo en hipoxia ahora", f"{hx['pct_fondo_hipoxia_actual']:.1f} %",
+                  "episodio en curso" if hx["hipoxia_actual"] else "sin episodio", delta_color="off", border=True,
+                  help="Porcentaje del fondo de la laguna con menos de 4 mg/L de oxígeno en esta campaña.")
         if hx["hipoxia_real_siguiente"] is not None:
             st.caption(f"Lo que pasó en la siguiente campaña: {'hipoxia' if hx['hipoxia_real_siguiente'] else 'sin hipoxia'}"
                        + (" (campaña usada para entrenar: no es una prueba honesta)" if hx["visto_en_entrenamiento"] else ""))
@@ -248,7 +309,14 @@ with tab_hipoxia:
                                            "log-odds"), width="stretch")
         st.caption(hx["nota"])
 
-# ------------------------------------------------------------------ 5. modelos
+# ------------------------------------------------------------------ 5. visor 4D
+with tab_visor:
+    url_visor = f"{URL_PUBLICA.rstrip('/')}/visor/"
+    st.caption("Oxígeno, temperatura, salinidad, clorofila y turbidez de las campañas in situ de la UPCT (2017–2024), "
+               f"en 3D y a lo largo del tiempo. [Abrir a pantalla completa]({url_visor})")
+    st.iframe(url_visor, height=720)
+
+# ------------------------------------------------------------------ 6. modelos
 with tab_modelos:
     m = llamar("modelos")
     st.markdown(f"Modelos exportados el **{m['exportado'][:10]}** desde el commit `{m['git_commit']}` "

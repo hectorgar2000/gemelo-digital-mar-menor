@@ -49,7 +49,7 @@ def test_carga_sin_errores_y_muestra_estado(api_url):
     at = abrir(api_url)
     assert not at.exception, at.exception
     etiquetas = [m.label for m in at.metric]
-    assert "Temperatura del agua" in etiquetas and "Prob. ola de calor a 7 días" in etiquetas
+    assert "Temperatura del agua" in etiquetas and "Prob. de ola de calor a 7 días" in etiquetas
     assert len(at.error) == 0
 
 

@@ -90,7 +90,14 @@
 - Las variables físicas previstas se calculan con `meteo_futura.con_fisica(prev, anom)` (pipeline y escenarios).
 - Cada versión guarda `residuos_validacion` (errores fuera de muestra con fecha) → `Gemelo.con_residuos_guardados`; sin ellos la P(ola de calor) degenera. Tras promocionar o reentrenar, comprobar que `metodo_intervalo` empieza por `conformal`.
 - Descartado con datos: huber, más regularización, híbrido lineal+residuo, ridge solo (salvo en la media a 30 días).
-- **Pendiente:** verificar Docker 0.10.0; cobertura del intervalo al 90 % nominal; saturación de árboles a 1–7 días; hipoxia (sin datos nuevos); reentrenar respaldos. **Siguiente tarea pedida por el usuario: la parte visual.**
+- **Pendiente:** cobertura del intervalo al 90 % nominal; saturación de árboles a 1–7 días; hipoxia (sin datos nuevos); reentrenar respaldos.
+
+## Mejora visual (ver docs/mejora_visual.md) · v0.11.0
+- Dashboard: resumen en una frase (`resumen_estado` + `aviso_estado`, HTML propio; NO usar `st.error` para estados del mar), tarjetas con borde, mapa con `contorno_laguna.json` (servido en `GET /estado`), olas de calor sombreadas, cascada XAI (`graficos.cascada`), `PRESETS` de escenarios, aguja de hipoxia y pestaña «Visor 4D» con `st.iframe`.
+- `dashboard/graficos.py` son funciones puras con tests en `tests/test_graficos.py`. Tema en `.streamlit/config.toml` (se copia en `Dockerfile.dashboard`).
+- Mapa siempre claro: `st.context.theme` no es fiable. Mapas y visor (WebGL) pueden salir en blanco en capturas: comprobar con `map.loaded()` / `triggerRepaint()` antes de darlos por rotos.
+- Al arrancar API y dashboard a la vez, esperar a que la API responda (`/salud`) antes de abrir el dashboard: cachea el error de conexión 10 minutos.
+- **Pendiente:** verificar Docker 0.11.0; resto de pendientes del bloque anterior (intervalo al 90 %, saturación a 1–7 días, hipoxia, respaldos).
 
 ## Anti-fuga (obligatorio)
 - Las variables del día t solo usan datos ≤ t. Climatologías y umbrales de las variables, solo con datos anteriores a validación.

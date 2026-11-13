@@ -16,7 +16,7 @@ from gemelo.config import DATA_RAW, RAIZ, RUTA_CONFIG, cargar_config
 from gemelo.procesado.features import (construir_dataset_hipoxia, construir_dataset_sst,
                                        grupo_variable, referencias_sst)
 from gemelo.procesado import meteo_futura
-from gemelo.procesado.cubo import construir_cubo, resumen_por_campana
+from gemelo.procesado.cubo import construir_cubo, contorno_laguna, resumen_por_campana
 from gemelo.procesado.insitu import campanas_insitu
 from gemelo.procesado.series import construir_diario
 
@@ -115,6 +115,7 @@ if __name__ == "__main__":
     cubo.to_parquet(PROCESSED / "cubo_insitu.parquet")
     resumen = resumen_por_campana(cubo, cfg["umbrales"]["hipoxia_mg_l"], cfg["umbrales"]["anoxia_mg_l"])
     resumen.to_parquet(PROCESSED / "cubo_resumen.parquet")
+    (PROCESSED / "contorno_laguna.json").write_text(json.dumps(contorno_laguna(cubo)), encoding="utf-8")  # mapa
     paso(f"    {len(cubo):,} filas · {cubo.fecha.nunique()} campañas · "
          f"{len(cubo) / cubo.fecha.nunique():,.0f} puntos 3D por campaña · máx. volumen en hipoxia "
          f"{resumen.pct_volumen_hipoxia.max():.1f} % ({resumen.pct_volumen_hipoxia.idxmax().date()})")

@@ -177,4 +177,6 @@ $("serie").addEventListener("click", (e) => {
   const r = e.target.getBoundingClientRect();
   irA(Math.round(((e.clientX - r.left) / r.width) * (estado.campanas.length - 1)));
 });
+// Si el visor se carga oculto (p. ej. en una pestaña del dashboard), el lienzo mide 0: se redibuja al mostrarse.
+new ResizeObserver(() => { if (estado.campanas.length) dibujarSerie(); }).observe($("serie"));
 iniciar();

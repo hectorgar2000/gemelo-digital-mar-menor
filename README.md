@@ -20,7 +20,7 @@ Todo se sirve como **MLaaS**:
 | Pieza | Dónde | Qué hace |
 |---|---|---|
 | API | `http://localhost:8000/docs` | `/predict`, `/explain`, `/scenario`, `/hipoxia/predict`, `/estado`, `/series`, `/monitor`, `/cubo`… |
-| Dashboard | `http://localhost:8501` | Estado y predicción, escenarios, XAI, hipoxia y salud de los modelos |
+| Dashboard | `http://localhost:8501` | Estado y predicción, escenarios, XAI, hipoxia, visor 4D integrado y salud de los modelos |
 | Visor 4D | `http://localhost:8000/visor/` | Cubos in situ (O₂, T, S…) en 3D a lo largo de 380 campañas |
 | Experimentos | `mlflow ui --backend-store-uri sqlite:///mlflow.db` | Ejecuciones, métricas, SHAP y Model Registry |
 
@@ -99,7 +99,7 @@ python scripts/ciclo_mantenimiento.py
 
 > **Nota sobre resultados:** los números de versión dependen del orden de ejecución (el ciclo de mantenimiento y la promoción de la receta crean versiones nuevas). Si se descarga en otra fecha, los reanálisis de Copernicus pueden traer más días y las cifras pueden variar ligeramente respecto a los informes.
 
-**Tests:** 86 en total, incluidos los anti-fuga, la API, los escenarios, el monitor y el dashboard. En un clon sin `data/` ni `models/` pasan los que no dependen de ellos y el resto se **salta** con un aviso que indica qué ejecutar. Con todo generado, pasan los 86.
+**Tests:** 92 en total, incluidos los anti-fuga, la API, los escenarios, el monitor y el dashboard. En un clon sin `data/` ni `models/` pasan los que no dependen de ellos y el resto se **salta** con un aviso que indica qué ejecutar. Con todo generado, pasan los 92.
 
 ## Estructura
 ```
@@ -129,6 +129,7 @@ Dockerfile, Dockerfile.dashboard, compose.yaml
 | 5 · Escenarios | `/scenario` con incertidumbre ([detalle](docs/fase5_escenarios.md)) | ✅ |
 | 6 · Dashboard | Streamlit de punta a punta ([detalle](docs/fase6_dashboard.md)) | ✅ |
 | Mejora de modelos | Variables físicas, pesos recientes y modelo combinado: −4 % de error, −10 % en extremos ([detalle](docs/mejora_modelos.md)) | ✅ |
+| Mejora visual | Resumen en una frase, contorno real de la laguna, cascada XAI, escenarios de un clic y visor integrado ([detalle](docs/mejora_visual.md)) | ✅ |
 | 7 · Evolución | Previsión meteorológica ([detalle](docs/fase7_prevision.md)) · deriva y reentrenamiento ([detalle](docs/fase7_deriva.md)) · visor 3D/4D ([detalle](docs/fase7_visor4d.md)) | ✅ |
 
 ## Fuentes de datos

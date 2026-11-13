@@ -33,7 +33,7 @@ app = FastAPI(
     title="Gemelo digital del Mar Menor",
     description="Predicción de temperatura del mar y olas de calor marinas (laguna y costa) y riesgo de "
                 "hipoxia, con intervalos de incertidumbre y explicaciones SHAP.",
-    version="0.10.0",
+    version="0.11.0",
     lifespan=ciclo_de_vida,
 )
 

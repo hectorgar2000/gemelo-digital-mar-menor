@@ -11,6 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY pyproject.toml README.md requirements.lock.txt ./
 COPY src ./src
+COPY .streamlit ./.streamlit
 RUN pip install -c requirements.lock.txt ".[dashboard]"
 
 RUN useradd --create-home gemelo && chown -R gemelo /app

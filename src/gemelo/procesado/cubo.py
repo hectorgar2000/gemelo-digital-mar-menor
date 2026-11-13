@@ -51,3 +51,15 @@ def resumen_por_campana(cubo: pd.DataFrame, umbral_hipoxia: float, umbral_anoxia
         "o2_medio": g["o2"].mean(),
         "temp_media": cubo.groupby("fecha")["temp"].mean(),
     }).round(3)
+
+
+def contorno_laguna(cubo: pd.DataFrame) -> list[list[float]]:
+    """Contorno aproximado de la laguna como polígono [[lon, lat], ...] (para el mapa del dashboard).
+    Para cada fila de latitud de la rejilla se toma el punto de agua más al oeste y el más al este: se sube
+    por la orilla oeste y se baja por la este. Sencillo y suficiente para una laguna sin islas grandes."""
+    sup = cubo[cubo["profundidad"] == cubo["profundidad"].min()][["lon", "lat"]].drop_duplicates()
+    medio_paso = float(sup["lon"].drop_duplicates().sort_values().diff().median()) / 2   # borde de la celda, no su centro
+    filas = sup.groupby("lat")["lon"].agg(["min", "max"]).sort_index()
+    oeste = [[round(float(r["min"] - medio_paso), 5), round(float(lat), 5)] for lat, r in filas.iterrows()]
+    este = [[round(float(r["max"] + medio_paso), 5), round(float(lat), 5)] for lat, r in filas.iloc[::-1].iterrows()]
+    return oeste + este + [oeste[0]]
