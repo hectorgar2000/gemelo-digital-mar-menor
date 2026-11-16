@@ -96,7 +96,7 @@
 ## Mejora visual (ver docs/mejora_visual.md) · v0.11.0
 - Dashboard: resumen en una frase (`resumen_estado` + `aviso_estado`, HTML propio; NO usar `st.error` para estados del mar), tarjetas con borde, mapa con `contorno_laguna.json` (servido en `GET /estado`), olas de calor sombreadas, cascada XAI (`graficos.cascada`), `PRESETS` de escenarios, aguja de hipoxia y pestaña «Visor 4D» con `st.iframe`.
 - `dashboard/graficos.py` son funciones puras con tests en `tests/test_graficos.py`. Tema en `.streamlit/config.toml` (se copia en `Dockerfile.dashboard`).
-- Mapa siempre claro: `st.context.theme` no es fiable. Mapas y visor (WebGL) pueden salir en blanco en capturas: comprobar con `map.loaded()` / `triggerRepaint()` antes de darlos por rotos.
+- **Rediseño (Claude Design, 2026-11-16):** visor y dashboard comparten sistema visual: tema oscuro fijo, IBM Plex Sans/Mono y la paleta del visor (`#6aaed6` acento, `#d6604d` calor/hipoxia, `#f4a582` predicción). Tokens en `visor.css`, `.streamlit/config.toml` y `graficos.py` (plantilla Plotly `gemelo`): si se cambia uno, cambiar los tres. `st.plotly_chart(..., theme=None)` siempre, o Streamlit pisa la plantilla. Mapa oscuro (`carto-darkmatter`): con tema fijo ya no hace falta detectar el tema. Mapas y visor (WebGL) pueden salir en blanco en capturas: comprobar con `map.loaded()` / `triggerRepaint()` antes de darlos por rotos.
 - Al arrancar API y dashboard a la vez, esperar a que la API responda (`/salud`) antes de abrir el dashboard: cachea el error de conexión 10 minutos.
 - **Pendiente:** verificar Docker 0.11.0; resto de pendientes del bloque anterior (intervalo al 90 %, saturación a 1–7 días, hipoxia, respaldos).
 

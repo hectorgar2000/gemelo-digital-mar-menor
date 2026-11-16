@@ -16,6 +16,45 @@ from gemelo.dashboard.cliente import URL_POR_DEFECTO, URL_PUBLICA, ClienteGemelo
 st.set_page_config(page_title="Gemelo digital · Mar Menor", page_icon="🌊", layout="wide")
 HORIZONTES = [1, 3, 7, 30]
 
+# Sistema visual del visor 4D (rediseño de Claude Design): mismos tokens que visor.css. El tema base (colores,
+# IBM Plex) está en .streamlit/config.toml; aquí solo lo que el tema no cubre. Los selectores data-testid son los
+# de Streamlit 1.67: si una versión nueva los cambia, la app sigue funcionando, solo pierde estos retoques.
+ESTILO = """<style>
+:root{--bg:#0e1117;--inset:#151a24;--field:#1c2230;--borde:#39414f;--borde-sutil:rgba(169,176,187,.12);
+  --texto:#e8e8e8;--texto-fuerte:#fff;--texto-suave:#a9b0bb;--acento:#6aaed6;--hipoxia:#d6604d;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+.eyebrow{font:500 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--acento);margin:0 0 6px}
+[data-testid="stHeading"] h2{font-weight:600;letter-spacing:-.01em;color:var(--texto-fuerte)}
+[data-testid="stHeading"] h3{font-size:15px;font-weight:600;color:var(--texto-fuerte)}
+/* pestañas: etiquetas en versalitas mono, como las secciones del visor */
+[data-baseweb="tab-list"]{gap:4px;border-bottom:1px solid var(--borde-sutil)}
+[data-baseweb="tab"] p{font:500 11.5px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+[data-baseweb="tab"][aria-selected="false"] p{color:var(--texto-suave)}
+/* tarjetas de métricas */
+[data-testid="stMetric"]{background:var(--inset);border-color:var(--borde-sutil)!important;border-radius:10px}
+[data-testid="stMetricLabel"] p{font:500 10.5px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--texto-suave)}
+[data-testid="stMetricValue"]{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums;color:var(--texto-fuerte)}
+[data-testid="stMetricDelta"]{font-family:var(--mono);font-size:12px}
+/* textos secundarios, expansores y gráficos */
+[data-testid="stCaptionContainer"]{color:var(--texto-suave)}
+[data-testid="stExpander"] details{background:var(--inset);border-color:var(--borde-sutil);border-radius:10px}
+[data-testid="stPlotlyChart"]{background:var(--inset);border:1px solid var(--borde-sutil);border-radius:10px;padding:6px 8px}
+[data-testid="stSidebar"] [data-testid="stHeading"] h1{font-size:19px;font-weight:600;letter-spacing:-.01em}
+/* franja de estado del mar y leyenda del mapa */
+.estado{display:flex;flex-direction:column;gap:6px;padding:12px 16px;margin:4px 0 14px;border-radius:10px;
+  background:var(--inset);border:1px solid var(--borde-sutil);border-left:3px solid var(--c)}
+.estado .eti{font:500 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--c)}
+.estado .txt{color:var(--texto);line-height:1.5}.estado b{color:var(--texto-fuerte);font-weight:600}
+.leyenda-mapa{display:flex;flex-wrap:wrap;gap:4px 14px;font:400 12px/1.4 var(--mono);color:var(--texto-suave);margin-top:4px}
+.leyenda-mapa i{display:inline-block;width:9px;height:9px;border-radius:999px;margin-right:6px;background:var(--c)}
+</style>"""
+st.markdown(ESTILO, unsafe_allow_html=True)
+
+
+def eyebrow(texto: str):
+    """Antetítulo en versalitas mono (el «GEMELO DIGITAL» del visor)."""
+    st.markdown(f'<p class="eyebrow">{texto}</p>', unsafe_allow_html=True)
+
 
 # ------------------------------------------------------------------ acceso a la API (con caché)
 @st.cache_resource
@@ -41,9 +80,9 @@ def aviso_campana_antigua(fecha_campana, dia_base, max_dias: int = 14):
     """El riesgo de hipoxia se calcula con la última campaña in situ: si es antigua, no describe el presente."""
     dias = (dia_base - date.fromisoformat(str(fecha_campana))).days
     if dias > max_dias:
-        st.warning(f"⚠️ La campaña in situ usada es del {fecha_campana}, **{dias} días** antes del día base: "
+        st.warning(f"La campaña in situ usada es del {fecha_campana}, **{dias} días** antes del día base: "
                    "describe el estado de la laguna entonces, no el actual. Los datos de la UPCT disponibles "
-                   "terminan en julio de 2024.")
+                   "terminan en julio de 2024.", icon=":material/schedule:")
 
 
 def resumen_estado(zona: str, z: dict, p7: dict) -> tuple[str, str]:
@@ -54,33 +93,37 @@ def resumen_estado(zona: str, z: dict, p7: dict) -> tuple[str, str]:
               f"(entre {p7['intervalo_90'][0]:.1f} y {p7['intervalo_90'][1]:.1f} °C) y una probabilidad del "
               f"**{prob:.0%}** de estar en ola de calor.")
     if z["ola_calor_en_curso"]:
-        return "alerta", (f"🔴 **{lugar} está en ola de calor marina** desde hace {z['dias_sobre_umbral']} días: "
+        return "alerta", (f"**{lugar} está en ola de calor marina** desde hace {z['dias_sobre_umbral']} días: "
                          f"{z['sst']:.1f} °C, {z['anomalia']:+.1f} °C sobre lo normal. {futuro}")
     if prob >= 0.5 or z["anomalia"] > 1.0:
-        return "atencion", (f"🟠 **{lugar} está más cálida de lo normal** ({z['sst']:.1f} °C, {z['anomalia']:+.1f} °C), "
+        return "atencion", (f"**{lugar} está más cálida de lo normal** ({z['sst']:.1f} °C, {z['anomalia']:+.1f} °C), "
                            f"sin ola de calor declarada. {futuro}")
-    return "normal", (f"🟢 **{lugar} está en valores normales** ({z['sst']:.1f} °C, {z['anomalia']:+.1f} °C respecto "
+    return "normal", (f"**{lugar} está en valores normales** ({z['sst']:.1f} °C, {z['anomalia']:+.1f} °C respecto "
                        f"a lo habitual). {futuro}")
 
 
-COLOR_ESTADO = {"alerta": "214,39,40", "atencion": "242,142,43", "normal": "44,160,44"}
+# nivel -> (color de la paleta, etiqueta en versalitas)
+ESTADOS = {"alerta": (G.ROJO, "Ola de calor marina"), "atencion": (G.NARANJA, "Más cálida de lo normal"),
+           "normal": (G.VERDE, "Valores normales")}
 
 
 def aviso_estado(nivel: str, texto: str):
-    """Franja de color con el resumen. No se usa st.error: el estado del mar no es un error de la aplicación."""
+    """Franja con el resumen. No se usa st.error: el estado del mar no es un error de la aplicación."""
     html = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", texto)   # las negritas de Markdown no se aplican dentro de HTML
-    color = COLOR_ESTADO[nivel]
-    st.markdown(f'<div style="border-left: 6px solid rgb({color}); background: rgba({color},0.10); '
-                f'padding: 12px 16px; border-radius: 6px; margin-bottom: 12px;">{html}</div>', unsafe_allow_html=True)
+    color, etiqueta = ESTADOS[nivel]
+    st.markdown(f'<div class="estado" style="--c:{color}"><span class="eti">{etiqueta}</span>'
+                f'<span class="txt">{html}</span></div>', unsafe_allow_html=True)
 
 
 # Escenarios de un clic: valores de los controles (los no citados vuelven a su valor neutro)
 PRESETS = {
-    "🌡️ Aire muy cálido": {"temp_aire": 3.0, "viento": 0.7},
-    "💨 Temporal de viento": {"viento": 2.0, "temp_aire": -1.0},
-    "🍃 Semana en calma": {"viento": 0.5},
-    "🌍 Clima +1,5 °C": {"calentamiento_base": 1.5},
+    "Aire muy cálido": {"temp_aire": 3.0, "viento": 0.7},
+    "Temporal de viento": {"viento": 2.0, "temp_aire": -1.0},
+    "Semana en calma": {"viento": 0.5},
+    "Clima +1,5 °C": {"calentamiento_base": 1.5},
 }
+ICONOS_PRESET = {"Aire muy cálido": ":material/thermostat:", "Temporal de viento": ":material/air:",
+                 "Semana en calma": ":material/water:", "Clima +1,5 °C": ":material/public:"}
 
 
 def aplicar_preset(valores: dict, controles: list):
@@ -93,14 +136,14 @@ def mostrar_escenario(r: dict):
     hs = r["sst"]["horizontes"]
     avisos = {a["variable"] for h in hs for a in h["fuera_de_rango"]}
     if avisos:
-        st.warning(f"⚠️ **Fuera de rango:** {len(avisos)} variables del escenario se salen de lo visto en "
+        st.warning(f"**Fuera de rango:** {len(avisos)} variables del escenario se salen de lo visto en "
                    f"entrenamiento ({', '.join(sorted(avisos)[:6])}{'…' if len(avisos) > 6 else ''}). "
-                   "El modelo extrapola: interpreta el resultado con cautela.")
+                   "El modelo extrapola: interpreta el resultado con cautela.", icon=":material/warning:")
     for d, nota in r["sst"]["notas"].items():
         st.caption(f"**{d}** — {nota}")
     c1, c2 = st.columns(2)
-    c1.plotly_chart(G.comparar_escenario(hs), width="stretch")
-    c2.plotly_chart(G.prob_ola(hs), width="stretch")
+    c1.plotly_chart(G.comparar_escenario(hs), width="stretch", theme=None)
+    c2.plotly_chart(G.prob_ola(hs), width="stretch", theme=None)
     st.dataframe(pd.DataFrame([{
         "Horizonte": f"{h['h']} d", "Cambio de SST (mediana)": f"{h['diferencia_sst']['p50']:+.2f} °C",
         "Cambio 90 %": f"{h['diferencia_sst']['p05']:+.2f} a {h['diferencia_sst']['p95']:+.2f} °C",
@@ -108,7 +151,7 @@ def mostrar_escenario(r: dict):
         "Variables fuera de rango": len(h["fuera_de_rango"])} for h in hs]), hide_index=True, width="stretch")
     h7 = next((h for h in hs if h["h"] == 7), hs[0])
     st.plotly_chart(G.barras_grupos(h7["cambio_explicado_por_grupo"],
-                                    f"¿Qué explica el cambio a {h7['h']} días? (SHAP escenario − base)"), width="stretch")
+                                    f"¿Qué explica el cambio a {h7['h']} días? (SHAP escenario − base)"), width="stretch", theme=None)
     if "hipoxia" in r:
         hx = r["hipoxia"]
         st.subheader(f"Riesgo de hipoxia · campaña {hx['fecha_campana']}")
@@ -119,14 +162,15 @@ def mostrar_escenario(r: dict):
                   f"{e['p50'] - hx['base']['prob_hipoxia']:+.0%} vs. base", delta_color="inverse")
         c1.caption(f"Base {hx['base']['prob_hipoxia']:.0%} · escenario 90 %: {e['p05']:.0%} – {e['p95']:.0%}")
         cambio = [{"grupo": x["variable"], "contribucion": x["contribucion"]} for x in hx["cambio_explicado_log_odds"]]
-        c2.plotly_chart(G.barras_grupos(cambio, "Qué cambia en el riesgo (log-odds)", "log-odds"), width="stretch")
+        c2.plotly_chart(G.barras_grupos(cambio, "Qué cambia en el riesgo (log-odds)", "log-odds"), width="stretch", theme=None)
 
 
 # ------------------------------------------------------------------ barra lateral
 with st.sidebar:
-    st.title("🌊 Gemelo digital")
-    st.caption("Mar Menor y costa adyacente")
-    with st.expander("⚙️ Conexión"):   # antes de las llamadas: si la API falla, se puede corregir la URL
+    eyebrow("Gemelo digital")
+    st.title("Mar Menor")
+    st.caption("Laguna y costa adyacente · datos reales de Copernicus, ERA5 y la UPCT")
+    with st.expander("Conexión", icon=":material/settings:"):   # antes de las llamadas: si la API falla, se puede corregir la URL
         st.session_state.url = st.text_input("URL de la API", URL_POR_DEFECTO)
     salud = llamar("salud")
     estado_ult = llamar("estado")
@@ -138,11 +182,13 @@ with st.sidebar:
     st.divider()
     st.caption(f"API: {salud['estado']} · {salud['modelos_sst']} modelos de SST · datos hasta {salud['ultima_fecha']}")
     if fecha != fin:
-        st.info("Día del pasado: verás también lo que pasó realmente.", icon="🕑")
+        st.info("Día del pasado: verás también lo que pasó realmente.", icon=":material/history:")
 
+eyebrow(f"Gemelo digital · {zona}")
 st.header(f"Mar Menor · {fecha:%d/%m/%Y}")
 tab_estado, tab_escenarios, tab_xai, tab_hipoxia, tab_visor, tab_modelos = st.tabs(
-    ["🌡️ Estado y predicción", "🧪 Escenarios", "🔍 Por qué (XAI)", "🫧 Hipoxia", "🧊 Visor 4D", "⚙️ Modelos"])
+    [":material/thermostat: Estado y predicción", ":material/science: Escenarios", ":material/insights: Por qué (XAI)",
+     ":material/bubble_chart: Hipoxia", ":material/view_in_ar: Visor 4D", ":material/monitor_heart: Modelos"])
 
 # ------------------------------------------------------------------ 1. estado y predicción
 with tab_estado:
@@ -168,14 +214,16 @@ with tab_estado:
 
     izq, der = st.columns([2, 5])
     with izq:
-        st.plotly_chart(G.mapa(est, zona), width="stretch")
-        st.caption("🔴 ola de calor · 🟠 más cálida de lo normal · 🔵 más fría · ⚪ normal. "
-                   "Puntos: celdas de la meteorología (ERA5).")
+        st.plotly_chart(G.mapa(est, zona), width="stretch", theme=None)
+        st.markdown(f'<div class="leyenda-mapa"><span><i style="--c:{G.ROJO}"></i>ola de calor</span>'
+                    f'<span><i style="--c:{G.NARANJA}"></i>más cálida</span><span><i style="--c:{G.AZUL}"></i>más fría</span>'
+                    f'<span><i style="--c:{G.GRIS}"></i>normal</span><span><i style="--c:#e8e8e8"></i>celdas ERA5</span></div>',
+                    unsafe_allow_html=True)
     with der:
         desde = (fecha - timedelta(days=120)).isoformat()
         hasta = min(fecha + timedelta(days=35), fin).isoformat()
         serie = llamar("series", zona, desde, hasta)
-        st.plotly_chart(G.serie_con_prediccion(serie, preds, zona, fecha), width="stretch")
+        st.plotly_chart(G.serie_con_prediccion(serie, preds, zona, fecha), width="stretch", theme=None)
     tabla = pd.DataFrame([{"Horizonte": f"{p['h']} d", "Fecha": pd.Timestamp(p["fecha_objetivo"]),
                            "SST prevista": p["sst_prevista"],
                            "Intervalo 90 %": f"{p['intervalo_90'][0]:.1f} – {p['intervalo_90'][1]:.1f} °C",
@@ -210,8 +258,9 @@ with tab_escenarios:
     st.caption("Escenarios de un clic (después pulsa **Simular escenario**):")
     botones = st.columns(len(PRESETS) + 1)
     for b, (nombre, vals) in zip(botones, PRESETS.items()):
-        b.button(nombre, on_click=aplicar_preset, args=(vals, CONTROLES), width="stretch")
-    botones[-1].button("↺ Reiniciar", on_click=aplicar_preset, args=({}, CONTROLES), width="stretch")
+        b.button(nombre, icon=ICONOS_PRESET[nombre], on_click=aplicar_preset, args=(vals, CONTROLES), width="stretch")
+    botones[-1].button("Reiniciar", icon=":material/restart_alt:", on_click=aplicar_preset, args=({}, CONTROLES),
+                       width="stretch")
     # Sin st.form a propósito: así los campos de incertidumbre aparecen al mover un control (en un
     # formulario no se actualizarían hasta enviarlo). La simulación solo se lanza con el botón.
     col_a, col_b = st.columns(2)
@@ -262,7 +311,7 @@ with tab_escenarios:
     if res and res["peticion"]["zona"] == zona and res["peticion"]["fecha"] == fecha_iso:
         r = res["respuesta"]
         if res["peticion"]["perturbaciones"] != perts:
-            st.caption("ℹ️ Resultado del último escenario simulado; has cambiado controles desde entonces.")
+            st.caption(":material/info: Resultado del último escenario simulado; has cambiado controles desde entonces.")
         mostrar_escenario(r)
 
 # ------------------------------------------------------------------ 3. XAI
@@ -271,10 +320,10 @@ with tab_xai:
     e = llamar("explicar", zona, h, fecha_iso, 12)
     st.markdown(f"El modelo predice que, dentro de {h} días, la anomalía de temperatura habrá cambiado "
                 f"**{e['prediccion']:+.2f} °C** respecto a la de hoy. La cascada muestra cómo se llega a esa cifra: "
-                "🔴 lo que empuja a calentar, 🔵 lo que empuja a enfriar.")
+                "en **rojo** lo que empuja a calentar, en **azul** lo que empuja a enfriar.")
     c1, c2 = st.columns([3, 2])
-    c1.plotly_chart(G.cascada(e["grupos"], e["valor_base"], e["prediccion"]), width="stretch")
-    c2.plotly_chart(G.barras_variables(e["variables"], "Las 12 variables que más pesan"), width="stretch")
+    c1.plotly_chart(G.cascada(e["grupos"], e["valor_base"], e["prediccion"]), width="stretch", theme=None)
+    c2.plotly_chart(G.barras_variables(e["variables"], "Las 12 variables que más pesan"), width="stretch", theme=None)
     st.caption(e["nota"])
     with st.expander("¿Cómo leer esto?"):
         st.markdown(
@@ -295,7 +344,7 @@ with tab_hipoxia:
         aviso_campana_antigua(sel, fecha)
         c1, c2, c3 = st.columns([2, 1, 1])
         c1.plotly_chart(G.aguja(hx["prob_hipoxia_siguiente"], titulo="Riesgo de hipoxia en la próxima campaña"),
-                        width="stretch")
+                        width="stretch", theme=None)
         c2.metric("Alerta temprana", "Sí" if hx["alerta_temprana"] else "No", border=True,
                   help="Se activa cuando la probabilidad supera el 50 %.")
         c3.metric("Fondo en hipoxia ahora", f"{hx['pct_fondo_hipoxia_actual']:.1f} %",
@@ -304,9 +353,9 @@ with tab_hipoxia:
         if hx["hipoxia_real_siguiente"] is not None:
             st.caption(f"Lo que pasó en la siguiente campaña: {'hipoxia' if hx['hipoxia_real_siguiente'] else 'sin hipoxia'}"
                        + (" (campaña usada para entrenar: no es una prueba honesta)" if hx["visto_en_entrenamiento"] else ""))
-        st.plotly_chart(G.historial_hipoxia(camp, 10, sel), width="stretch")
+        st.plotly_chart(G.historial_hipoxia(camp, 10, sel), width="stretch", theme=None)
         st.plotly_chart(G.barras_variables(hx["contribuciones_log_odds"][:10], "Por qué (contribución al riesgo, log-odds)",
-                                           "log-odds"), width="stretch")
+                                           "log-odds"), width="stretch", theme=None)
         st.caption(hx["nota"])
 
 # ------------------------------------------------------------------ 5. visor 4D

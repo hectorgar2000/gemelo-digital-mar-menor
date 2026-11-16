@@ -1,6 +1,38 @@
-# Tema del dashboard: azul marino en vez del rojo por defecto de Streamlit
+# Tema del dashboard: el mismo sistema visual que el visor 4D (rediseño de Claude Design).
+# Oscuro fijo (no depende del tema del sistema), IBM Plex Sans/Mono y la paleta del visor.
+# Los colores de los gráficos están en src/gemelo/dashboard/graficos.py (PALETA) y deben coincidir con estos.
 [theme]
-primaryColor = "#1f9bcf"
+base = "dark"
+primaryColor = "#6aaed6"              # --acento
+backgroundColor = "#0e1117"           # --bg
+secondaryBackgroundColor = "#1c2230"  # --field (campos y controles)
+textColor = "#e8e8e8"                 # --texto
+borderColor = "#39414f"               # --borde
+dataframeBorderColor = "#39414f"
+dataframeHeaderBackgroundColor = "#151a24"
+dataframeHeaderTextColor = "#a9b0bb"
+linkColor = "#92c5de"                 # --acento-claro
+redColor = "#d6604d"                  # --hipoxia
+orangeColor = "#f4a582"               # --hipoxia-claro
+blueColor = "#6aaed6"
+greenColor = "#7fc8a9"
+grayColor = "#a9b0bb"
+codeTextColor = "#92c5de"
+codeBackgroundColor = "#151a24"
+font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap, sans-serif"
+codeFont = "IBM Plex Mono:https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap, monospace"
+headingFont = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap, sans-serif"
+headingFontWeights = 600
+baseFontSize = 14
+baseRadius = "6px"
+buttonRadius = "6px"
+showWidgetBorder = true
+chartCategoricalColors = ["#6aaed6", "#f4a582", "#d6604d", "#a9b0bb", "#7fc8a9", "#92c5de"]
+
+[theme.sidebar]
+backgroundColor = "#151a24"           # --inset
+secondaryBackgroundColor = "#1c2230"
+borderColor = "#39414f"
 
 [browser]
 gatherUsageStats = false
