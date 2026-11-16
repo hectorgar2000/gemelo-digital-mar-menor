@@ -28,6 +28,7 @@
 - O₂ in situ: UPCT THREDDS `L2/Oxigeno.nc`, semanal, mar 2017 → jul 2024, 10 profundidades de 0,5 a 5 m, mg/L. Hay un registro con fecha errónea (1970) que hay que filtrar. El mismo THREDDS tiene `Temperatura`, `Salinidad`, `Clorofila`, `Turbidez`… con la misma rejilla.
 - La SST de satélite en la laguna tiene sesgo estacional frente a la in situ (+1,9 °C en invierno, −2,3 °C en mayo; RMSE 1,7 °C).
 - Meteorología: ERA5 vía Open-Meteo (sin cuenta). Viento en km/h. Las peticiones largas pueden devolver 429: el código reintenta.
+- Datos más recientes (2026-11-16, ver `docs/propuestas_mejora.md` B1/B2): SST NRT 1 km (`SST_MED_SST_L4_NRT_OBSERVATIONS_010_004_c_V2`) llega a ayer, pero en la laguna difiere del REP (RMSE 0,74 °C incluso corregido): no usarlo ahí sin reentrenar. El REP ya llega a ~1 mes de retraso. **Datos actualizados a 2026-10-16** (`periodo.fin`): re-descargar no cambió ningún día anterior ni la climatología; modelos sin reentrenar (`datos_hasta` 2026-09-30, cooldown). `fisica_hflux`/`mflux` terminan en 2025-07-31 (no se usan como variables). Copia del estado anterior en el scratchpad de la sesión del 2026-11-16. Oxígeno: la UPCT termina en 2024-07-18 en todos sus catálogos; el IEO-CSIC (BELICH, boyas + CTD) tiene datos hasta 2026 pero sin descarga pública.
 - Deriva: el test (2022–2026) es ~1 °C más cálido que train y tiene un 38 % de días de ola de calor (5 % en train).
 
 ## Decisiones para la Fase 3 (acordadas con el usuario)

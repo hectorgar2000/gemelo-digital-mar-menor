@@ -73,10 +73,30 @@ El gemelo se detiene el 30-09-2026 porque usa reanálisis. Verificar con `copern
 de SST y clorofila, medir su diferencia con el reanálisis en el periodo común y, si es pequeña, alimentar con ellos el
 último tramo. Con la previsión en vivo de Open-Meteo, el gemelo daría una predicción nueva cada día.
 
+*Comprobado el 2026-11-16* (`copernicusmarine describe` y comparación en el periodo común):
+- `SST_MED_SST_L4_NRT_OBSERVATIONS_010_004_c_V2` (1 km) llega hasta el día anterior y empieza en 2008. El de 1/16°
+  (`_a_V2`) no tiene ninguna celda en la laguna: solo sirve para la costa.
+- **Costa:** NRT y REP casi coinciden (RMSE 0,47 °C en 2022–2026, sesgo −0,05; correlación 0,995).
+- **Laguna:** discrepan mucho. RMSE 1,04 °C con sesgo estacional (+1,0 °C en invierno, −1,2 °C en verano); con una
+  corrección por día del año ajustada en 2008–2021 baja a 0,74 °C, y el error del cambio diario es de 0,59 °C. Es más
+  que el error del modelo a 1 día (0,43 °C): usar el NRT tal cual empeoraría las predicciones cortas de la laguna.
+- **Frente al agua (campañas UPCT 2017–2024)** el NRT de 1 km es peor que el REP en la laguna: RMSE 2,52 °C frente a 1,73.
+- **Alternativa barata:** el propio REP ya llega al 2026-10-16 (un mes de retraso, no dos) y la clorofila multianual
+  al 2026-11-04. Basta con ampliar `periodo.fin` y volver a descargar.
+- Conclusión: NRT viable para la costa; en la laguna, solo como dato provisional y avisado, o reentrenando con él.
+
 **B2 · Datos de oxígeno recientes** — impacto alto, esfuerzo incierto (depende de terceros).
-Sin campañas nuevas el modelo de hipoxia no se puede vigilar, reentrenar ni usar hoy. Preguntar a la UPCT por la
-continuidad del servidor y buscar series de boyas o sondas fijas. Sin esto, cualquier mejora del modelo de hipoxia es
-teórica: hay 9 episodios para aprender.
+Sin campañas nuevas el modelo de hipoxia no se puede vigilar, reentrenar ni usar hoy. Sin esto, cualquier mejora del
+modelo de hipoxia es teórica: hay 9 episodios para aprender.
+
+*Comprobado el 2026-11-16:*
+- **UPCT:** todos los catálogos del THREDDS (L1, L2 y los CSV de L4) terminan en la campaña del 2024-07-18. No hay más.
+- **IEO-CSIC, proyecto BELICH:** sistema de monitorización con tres boyas, sondas CTD, mareógrafo y estación
+  meteorológica, con informes mensuales hasta octubre de 2026 publicados por el MITECO. Su web no ofrece descarga de
+  datos: hay que pedirlos (belich.ieo.csic.es/contacto).
+- **CARM (Canal Mar Menor):** informes semanales del Comité de Gestión con datos de sonda hasta agosto de 2026, en PDF.
+  La web tiene protección contra robots; no se ha comprobado si hay descarga.
+- Siguiente paso: solicitar al IEO-CSIC las series de oxígeno de las boyas y de los perfiles CTD.
 
 **B3 · Calibrar la SST de satélite de la laguna con la in situ** — impacto medio, esfuerzo medio.
 El sesgo estacional (+1,9 °C en invierno, −2,3 °C en mayo) está medido. Una corrección por día del año, ajustada solo

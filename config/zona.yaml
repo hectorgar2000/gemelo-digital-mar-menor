@@ -16,12 +16,12 @@ subzonas:
 
 periodo:
   inicio: "1998-01-01"
-  fin: "2026-09-30"
+  fin: "2026-10-16"         # último día de la SST reprocesada (comprobado 2026-11-16)
 
 particion:                  # temporal, nunca aleatoria
   train: ["1998-01-01", "2018-12-31"]
   validacion: ["2019-01-01", "2021-12-31"]
-  test: ["2022-01-01", "2026-09-30"]
+  test: ["2022-01-01", "2026-10-16"]
 
 horizontes_dias: [1, 3, 7, 30]   # 30 = experimental
 
