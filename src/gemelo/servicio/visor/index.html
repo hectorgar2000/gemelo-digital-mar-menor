@@ -8,42 +8,60 @@
   <script>window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/";</script>
   <script src="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <meta name="theme-color" content="#0e1117">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link href="visor.css" rel="stylesheet">
 </head>
 <body>
   <div id="mapa"></div>
 
   <aside id="panel">
-    <h1>Mar Menor · 4D</h1>
-    <p class="sub">Campañas in situ de la UPCT (2017–2024): 10 profundidades de 0,5 a 5 m, una por semana.</p>
+    <header class="cabecera">
+      <span class="eyebrow">Gemelo digital</span>
+      <h1>Mar Menor · 4D</h1>
+      <p class="sub">Campañas in situ de la UPCT (2017–2024): 10 profundidades de 0,5 a 5 m, una por semana.</p>
+    </header>
 
-    <label>Variable
-      <select id="variable"></select>
-    </label>
+    <section class="grupo">
+      <label><span class="eti">Variable</span>
+        <select id="variable"></select>
+      </label>
+    </section>
 
-    <div class="fila">
-      <button id="anterior" title="Campaña anterior">◀</button>
-      <button id="play" title="Reproducir">▶</button>
-      <button id="siguiente" title="Campaña siguiente">▶|</button>
-      <strong id="fecha">—</strong>
-    </div>
-    <input id="tiempo" type="range" min="0" max="0" value="0" aria-label="Campaña">
+    <section class="grupo">
+      <span class="eti">Tiempo</span>
+      <div class="fila transporte">
+        <button id="anterior" title="Campaña anterior">|◀</button>
+        <button id="play" title="Reproducir">▶</button>
+        <button id="siguiente" title="Campaña siguiente">▶|</button>
+        <strong id="fecha">—</strong>
+      </div>
+      <input id="tiempo" type="range" min="0" max="0" value="0" aria-label="Campaña">
+      <canvas id="serie" width="300" height="70" title="Volumen de la laguna con O₂ < 4 mg/L. Haz clic para ir a esa campaña."></canvas>
+      <p class="nota">% del volumen con O₂ &lt; 4 mg/L en cada campaña (clic para saltar).</p>
+    </section>
 
-    <canvas id="serie" width="300" height="70" title="Volumen de la laguna con O₂ < 4 mg/L. Haz clic para ir a esa campaña."></canvas>
-    <p class="nota">% del volumen con O₂ &lt; 4 mg/L en cada campaña (clic para saltar).</p>
+    <section class="grupo">
+      <span class="eti">Leyenda</span>
+      <div id="leyenda"><div id="rampa"></div><div id="etiquetas"></div></div>
+    </section>
 
-    <div id="leyenda"><div id="rampa"></div><div id="etiquetas"></div></div>
+    <section class="grupo">
+      <span class="eti">Filtros</span>
+      <label class="check"><input type="checkbox" id="soloHipoxia"> Solo agua con O₂ &lt; 4 mg/L (hipoxia)</label>
+      <div class="fila">
+        <label>Desde <select id="profMin"></select> m</label>
+        <label>hasta <select id="profMax"></select> m</label>
+      </div>
+    </section>
 
-    <label class="check"><input type="checkbox" id="soloHipoxia"> Solo agua con O₂ &lt; 4 mg/L (hipoxia)</label>
-
-    <div class="fila">
-      <label>Desde <select id="profMin"></select> m</label>
-      <label>hasta <select id="profMax"></select> m</label>
-    </div>
-
-    <label>Exageración vertical ×<span id="exagValor">600</span>
-      <input id="exag" type="range" min="100" max="2000" step="100" value="600">
-    </label>
+    <section class="grupo">
+      <label><span class="eti">Exageración vertical <span class="valor">×<span id="exagValor">600</span></span></span>
+        <input id="exag" type="range" min="100" max="2000" step="100" value="600">
+      </label>
+    </section>
 
     <div id="info"></div>
     <p class="nota">Cada punto es un bloque de ~330 × 450 m. Las capas se apilan con la superficie arriba.

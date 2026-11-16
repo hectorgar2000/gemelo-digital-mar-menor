@@ -1,29 +1,92 @@
-html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #0e1117; }
-#mapa { position: absolute; inset: 0; }
-#panel {
-  position: absolute; top: 12px; left: 12px; width: 320px; max-height: calc(100% - 24px); overflow-y: auto;
-  background: rgba(14, 17, 23, 0.88); color: #e8e8e8; border-radius: 10px; padding: 14px 16px; box-sizing: border-box;
-  font-size: 13px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+:root{
+  --bg:#0e1117;--panel:rgba(14,17,23,.86);--inset:#151a24;--field:#1c2230;--control:#1a2030;--control-h:#2b3445;--control-a:#3a4660;
+  --borde:#39414f;--borde-sutil:rgba(169,176,187,.12);--borde-fuerte:#5b6577;
+  --texto:#e8e8e8;--texto-fuerte:#fff;--texto-suave:#a9b0bb;--texto-tenue:#5b6577;
+  --acento:#6aaed6;--acento-claro:#92c5de;--acento-osc:#4393c3;--foco:rgba(106,174,214,.55);
+  --hipoxia:#d6604d;--hipoxia-claro:#f4a582;--error:#ff8a80;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --ease:cubic-bezier(.2,.7,.2,1);
 }
-#panel h1 { font-size: 17px; margin: 0 0 4px; }
-.sub, .nota { color: #a9b0bb; font-size: 11.5px; margin: 4px 0 10px; line-height: 1.35; }
-label { display: block; margin: 8px 0 4px; }
-select, input[type=range] { width: 100%; }
-select { background: #1c2230; color: #e8e8e8; border: 1px solid #39414f; border-radius: 6px; padding: 4px; }
-.fila { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
-.fila label { flex: 1; margin: 0; white-space: nowrap; }
-.fila label select { width: auto; min-width: 58px; }
-button { background: #2b3445; color: #e8e8e8; border: 1px solid #39414f; border-radius: 6px; padding: 4px 9px; cursor: pointer; }
-button:hover { background: #3a4660; }
-#fecha { margin-left: auto; font-size: 14px; }
-#serie { width: 100%; height: 70px; background: #151a24; border-radius: 6px; cursor: pointer; margin-top: 6px; }
-#leyenda { margin: 10px 0; }
-#rampa { height: 12px; border-radius: 4px; }
-#etiquetas { display: flex; justify-content: space-between; color: #a9b0bb; font-size: 11px; margin-top: 2px; }
-.check { display: flex; gap: 6px; align-items: center; }
-#info { background: #151a24; border-radius: 6px; padding: 8px 10px; margin: 10px 0; line-height: 1.6; }
-#info b { color: #fff; }
-#error { color: #ff8a80; font-size: 12px; }
-@media (max-width: 600px) {
-  #panel { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 50%; }
+html,body{margin:0;height:100%;font-family:var(--sans);background:var(--bg)}
+#mapa{position:absolute;inset:0}
+
+#panel{position:absolute;top:12px;left:12px;width:320px;max-height:calc(100% - 24px);overflow-y:auto;box-sizing:border-box;
+  display:flex;flex-direction:column;gap:14px;padding:14px 16px;border-radius:10px;
+  background:var(--panel);-webkit-backdrop-filter:blur(10px) saturate(1.1);backdrop-filter:blur(10px) saturate(1.1);
+  color:var(--texto);font:400 13px/1.45 var(--sans);
+  box-shadow:0 4px 18px rgba(0,0,0,.4),0 0 0 1px rgba(169,176,187,.08);scrollbar-width:thin;scrollbar-color:var(--borde) transparent}
+
+.cabecera{display:flex;flex-direction:column;gap:4px}
+.eyebrow,.eti{font:500 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.eyebrow{color:var(--acento)}
+#panel h1{margin:0;font:600 17px/1.2 var(--sans);letter-spacing:-.01em;color:var(--texto-fuerte)}
+.sub,.nota{margin:0;color:var(--texto-suave);font-size:11.5px;line-height:1.35;text-wrap:pretty}
+
+.grupo{display:flex;flex-direction:column;gap:8px;padding-top:14px;border-top:1px solid var(--borde-sutil)}
+.eti{display:flex;justify-content:space-between;align-items:baseline;color:var(--texto-suave)}
+.eti .valor{color:var(--texto);letter-spacing:0;text-transform:none}
+label{display:flex;flex-direction:column;gap:8px;margin:0}
+
+select{width:100%;height:30px;box-sizing:border-box;padding:0 26px 0 10px;appearance:none;-webkit-appearance:none;cursor:pointer;
+  background:var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a9b0bb' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+  color:var(--texto);border:1px solid var(--borde);border-radius:6px;font:400 13px/1 var(--sans);transition:border-color 120ms var(--ease)}
+select:hover{border-color:var(--borde-fuerte)}
+
+.fila{display:flex;gap:12px;align-items:center;margin:0}
+.fila label{flex:1;flex-direction:row;align-items:center;gap:6px;white-space:nowrap;color:var(--texto-suave)}
+.fila label select{width:auto;min-width:64px}
+.transporte{gap:6px}
+
+button{height:30px;min-width:30px;padding:0 10px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;
+  background:var(--control);color:var(--texto);border:1px solid var(--borde);border-radius:6px;font:500 12px/1 var(--sans);white-space:nowrap;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);transition:background 120ms var(--ease),transform 120ms var(--ease)}
+button:hover{background:var(--control-h)}
+button:active{background:var(--control-a);transform:translateY(1px)}
+#play{min-width:38px;background:var(--acento);border-color:transparent;color:#080b10;font-weight:600;box-shadow:none}
+#play:hover{background:var(--acento-claro)}
+#play:active{background:var(--acento-osc)}
+#fecha{margin-left:auto;font:500 15px/1 var(--mono);color:var(--texto-fuerte);font-variant-numeric:tabular-nums}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:18px;margin:0;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:var(--control-h)}
+input[type=range]::-moz-range-track{height:4px;border-radius:999px;background:var(--control-h)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:999px;background:var(--acento)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border:0;border-radius:999px;background:#fff;box-shadow:0 0 0 3px var(--bg),0 1px 4px rgba(0,0,0,.5)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:999px;background:#fff;box-shadow:0 0 0 3px var(--bg),0 1px 4px rgba(0,0,0,.5)}
+
+:focus-visible{outline:2px solid var(--foco);outline-offset:2px}
+
+#serie{display:block;width:100%;height:70px;background:var(--inset);border-radius:6px;box-shadow:inset 0 0 0 1px var(--borde-sutil);cursor:pointer}
+
+#leyenda{display:flex;flex-direction:column;gap:4px;margin:0}
+#rampa{height:12px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+#etiquetas{display:flex;justify-content:space-between;color:var(--texto-suave);font:500 10.5px/1 var(--mono);font-variant-numeric:tabular-nums}
+#etiquetas{gap:8px}#etiquetas span{white-space:nowrap}
+#etiquetas span:nth-child(2){color:var(--texto);overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+.check{flex-direction:row;gap:8px;align-items:center;cursor:pointer}
+.check input{appearance:none;-webkit-appearance:none;width:16px;height:16px;margin:0;flex:none;border-radius:3px;border:1px solid var(--borde-fuerte);background:var(--field);display:grid;place-content:center;cursor:pointer;transition:background 180ms var(--ease)}
+.check input:checked{background:var(--hipoxia);border-color:var(--hipoxia)}
+.check input:checked::after{content:"";width:8px;height:4px;border:solid #fff;border-width:0 0 1.6px 1.6px;transform:translateY(-1px) rotate(-45deg)}
+.check:has(input:disabled){opacity:.45;cursor:not-allowed}
+
+#info{margin:0;padding:8px 10px;background:var(--inset);border-radius:6px;box-shadow:inset 0 0 0 1px var(--borde-sutil);
+  font:400 11.5px/1.6 var(--mono);color:var(--texto-suave);font-variant-numeric:tabular-nums}
+#info:empty{display:none}
+#info b{color:var(--texto-fuerte);font-weight:500}
+#info b:first-child{font-size:13px}
+
+#error{margin:0;color:var(--error);font-size:12px;line-height:1.4}
+#error:not(:empty){padding:8px 10px;background:rgba(255,138,128,.08);border:1px solid rgba(255,138,128,.28);border-radius:6px}
+
+/* Cesium: integrar el botón "home" y los créditos */
+.cesium-viewer-toolbar{top:12px;right:12px}
+.cesium-viewer-toolbar .cesium-button{background:var(--panel);border:1px solid var(--borde);border-radius:6px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.cesium-viewer-toolbar .cesium-button:hover{background:var(--control-h);box-shadow:none;border-color:var(--borde-fuerte)}
+.cesium-viewer-bottom{opacity:.7}
+
+@media (max-width:600px){
+  #panel{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:50%}
 }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
